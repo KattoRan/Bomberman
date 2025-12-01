@@ -21,7 +21,10 @@ typedef struct {
 
 ClientInfo clients[MAX_CLIENTS * MAX_LOBBIES];
 int num_clients = 0;
-GameState active_games[MAX_LOBBIES]; 
+GameState active_games[MAX_LOBBIES];
+
+// --- THÊM: Tracking game update timing ---
+long long last_game_update[MAX_LOBBIES];
 
 ClientInfo* find_client_by_socket(int socket_fd) {
     for (int i = 0; i < num_clients; i++) {
@@ -53,13 +56,20 @@ void broadcast_lobby_update(int lobby_id) {
 void broadcast_game_state(int lobby_id) {
     ServerPacket packet;
     packet.type = MSG_GAME_STATE;
-    packet.payload.game_state = active_games[lobby_id]; 
+    packet.payload.game_state = active_games[lobby_id];
 
     for (int i = 0; i < num_clients; i++) {
         if (clients[i].lobby_id == lobby_id && clients[i].is_authenticated) {
              send_response(clients[i].socket_fd, &packet);
         }
     }
+}
+
+// --- THÊM: Get current time in milliseconds ---
+long long get_current_time_ms() {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return ts.tv_sec * 1000LL + ts.tv_nsec / 1000000LL;
 }
 
 // --- Packet Handling ---
@@ -92,6 +102,9 @@ void handle_client_packet(int socket_fd, ClientPacket *pkt) {
                     } else if (pkt->type == MSG_PLANT_BOMB) {
                         plant_bomb(gs, p_id);
                     }
+                    
+                    // IMPORTANT: Broadcast ngay khi có input để responsive
+                    broadcast_game_state(client->lobby_id);
                 }
             }
         }
@@ -177,7 +190,12 @@ void handle_client_packet(int socket_fd, ClientPacket *pkt) {
                 if (start_res == 0) {
                     Lobby *lb = find_lobby(client->lobby_id);
                     init_game(&active_games[client->lobby_id], lb);
-                    broadcast_lobby_update(client->lobby_id); 
+                    
+                    // THÊM: Initialize game update timer
+                    last_game_update[client->lobby_id] = get_current_time_ms();
+                    
+                    broadcast_lobby_update(client->lobby_id);
+                    broadcast_game_state(client->lobby_id);
                 }
             }
             break;
@@ -187,15 +205,25 @@ void handle_client_packet(int socket_fd, ClientPacket *pkt) {
 // --- Main Server Loop ---
 
 int main() {
+    printf("╔════════════════════════════════════╗\n");
+    printf("║  Bomberman Realtime Server v3.0   ║\n");
+    printf("║  Game tick rate: 20 Hz (50ms)     ║\n");
+    printf("╚════════════════════════════════════╝\n\n");
+    
     load_users();
     init_lobbies();
     int server_fd = init_server_socket();
+    
+    // Initialize game update timers
+    for (int i = 0; i < MAX_LOBBIES; i++) {
+        last_game_update[i] = 0;
+    }
     
     fd_set readfds;
     struct timeval tv;
     int max_fd;
 
-    printf("SERVER STARTED on PORT %d\n", PORT);
+    printf("SERVER STARTED on PORT %d\n\n", PORT);
 
     while (1) {
         FD_ZERO(&readfds);
@@ -209,15 +237,14 @@ int main() {
             }
         }
 
+        // THAY ĐÔI: Giảm timeout để game loop chạy mượt hơn
         tv.tv_sec = 0;
-        tv.tv_usec = 15000; 
+        tv.tv_usec = 10000; // 10ms instead of 15ms
 
         int activity = select(max_fd + 1, &readfds, NULL, NULL, &tv);
         
-        // Fix warning: unused variable 'activity'
         if (activity < 0) {
-            // Có thể in lỗi nếu cần, hoặc bỏ qua nếu là ngắt tín hiệu
-            // perror("Select error"); 
+            // Error handling (có thể log nếu cần)
         }
 
         // 1. New Connections
@@ -230,7 +257,8 @@ int main() {
                 cl->socket_fd = new_sock;
                 cl->lobby_id = -1;
                 cl->is_authenticated = 0;
-                printf("Client connected: %d\n", new_sock);
+                cl->username[0] = '\0';
+                printf("[CONNECTION] Client %d connected\n", new_sock);
             }
         }
 
@@ -241,11 +269,18 @@ int main() {
                 ClientPacket pkt;
                 int n = recv(sd, &pkt, sizeof(pkt), 0);
                 if (n <= 0) {
+                    // Client disconnected
+                    printf("[DISCONNECT] Client %d (%s)\n", sd, 
+                           clients[i].username[0] ? clients[i].username : "unknown");
+                    
                     if (clients[i].lobby_id != -1) {
                          leave_lobby(clients[i].lobby_id, clients[i].username);
                          broadcast_lobby_update(clients[i].lobby_id);
                     }
-                    logout_user(clients[i].username);
+                    if (clients[i].is_authenticated) {
+                        logout_user(clients[i].username);
+                    }
+                    
                     close(sd);
                     clients[i] = clients[num_clients-1];
                     num_clients--;
@@ -256,19 +291,49 @@ int main() {
             }
         }
 
-        // 3. Game Loop Update
+        // 3. *** CRITICAL: REALTIME GAME LOOP với TIMING CONTROL ***
+        long long now = get_current_time_ms();
+        const long long GAME_TICK_INTERVAL = 50; // 50ms = 20 ticks/second
+        
         for (int i = 0; i < MAX_LOBBIES; i++) {
             Lobby *lb = find_lobby(i);
             if (lb && lb->status == LOBBY_PLAYING) {
-                update_game(&active_games[i]);
-                broadcast_game_state(i);
+                
+                // KIỂM TRA: Chỉ update khi đủ thời gian
+                if (now - last_game_update[i] >= GAME_TICK_INTERVAL) {
+                    
+                    // Update game logic (bombs, explosions, deaths)
+                    update_game(&active_games[i]);
+                    
+                    // Broadcast state to all players
+                    broadcast_game_state(i);
+                    
+                    // Update timer
+                    last_game_update[i] = now;
 
-                if (active_games[i].game_status == GAME_ENDED) {
-                    lb->status = LOBBY_WAITING; 
-                    broadcast_lobby_update(i);
+                    // Check game over
+                    if (active_games[i].game_status == GAME_ENDED) {
+                        printf("[GAME] Lobby %d ended. Winner: %d\n", 
+                               i, active_games[i].winner_id);
+                        
+                        lb->status = LOBBY_WAITING;
+                        
+                        // Reset all players to not ready
+                        for (int j = 0; j < lb->num_players; j++) {
+                            if (j != lb->host_id) {
+                                lb->players[j].is_ready = 0;
+                            }
+                        }
+                        
+                        broadcast_lobby_update(i);
+                        
+                        // Broadcast final game state
+                        broadcast_game_state(i);
+                    }
                 }
             }
         }
     }
+    
     return 0;
 }

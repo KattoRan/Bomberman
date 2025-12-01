@@ -5,6 +5,7 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <string.h>
+#include <fcntl.h>
 #include "../common/protocol.h"
 #include "ui.h" 
 
@@ -66,6 +67,33 @@ void handle_text_input(InputField *field, char c) {
     }
 }
 
+// --- IMPROVED: Network packet receiving với buffer handling ---
+int receive_server_packet(ServerPacket *out_packet) {
+    static char buffer[sizeof(ServerPacket)];
+    static int bytes_received = 0;
+    
+    // Nhận thêm dữ liệu
+    int n = recv(sock, buffer + bytes_received, 
+                 sizeof(ServerPacket) - bytes_received, MSG_DONTWAIT);
+    
+    if (n > 0) {
+        bytes_received += n;
+        
+        // Đã nhận đủ một packet
+        if (bytes_received == sizeof(ServerPacket)) {
+            memcpy(out_packet, buffer, sizeof(ServerPacket));
+            bytes_received = 0;
+            return 1; // Success
+        }
+    } else if (n == 0) {
+        // Server closed connection
+        return -1;
+    }
+    // n < 0 với MSG_DONTWAIT: EAGAIN/EWOULDBLOCK = không có data
+    
+    return 0; // Chưa đủ dữ liệu
+}
+
 // --- Network Functions ---
 void send_packet(int type, int data) {
     ClientPacket pkt;
@@ -96,6 +124,9 @@ void process_server_packet(ServerPacket *pkt) {
             current_lobby = pkt->payload.lobby;
             if (current_lobby.status == LOBBY_PLAYING) {
                 current_screen = SCREEN_GAME;
+                
+                // Reset game state khi bắt đầu game
+                memset(&current_state, 0, sizeof(GameState));
             } else {
                 current_screen = SCREEN_LOBBY_ROOM;
             }
@@ -104,6 +135,23 @@ void process_server_packet(ServerPacket *pkt) {
         case MSG_GAME_STATE:
             // --- SỬA ĐỔI: Cập nhật trực tiếp vào current_state ---
             current_state = pkt->payload.game_state;
+            
+            // THÊM: Tự động quay về lobby nếu game ended
+            if (current_state.game_status == GAME_ENDED) {
+                printf("\n╔════════════════════════════╗\n");
+                printf("║      GAME ENDED!           ║\n");
+                if (current_state.winner_id >= 0) {
+                    printf("║  Winner: %s\n", 
+                           current_state.players[current_state.winner_id].username);
+                } else {
+                    printf("║      Draw!                 ║\n");
+                }
+                printf("╚════════════════════════════╝\n\n");
+                
+                // Sau 3 giây tự động về lobby
+                SDL_Delay(3000);
+                current_screen = SCREEN_LOBBY_ROOM;
+            }
             break;
             
         case MSG_ERROR:
@@ -130,11 +178,21 @@ int main(int argc, char *argv[]) {
         printf("Cannot connect to server\n");
         return -1;
     }
+    
+    // Set socket non-blocking
+    int flags = fcntl(sock, F_GETFL, 0);
+    fcntl(sock, F_SETFL, flags | O_NONBLOCK);
+    
+    printf("Connected to server!\n");
 
     // 2. Setup SDL
     SDL_Init(SDL_INIT_VIDEO);
     TTF_Init();
-    SDL_Window *win = SDL_CreateWindow("Bomberman", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 800, 600, SDL_WINDOW_SHOWN);
+    SDL_Window *win = SDL_CreateWindow("Bomberman", 
+                                       SDL_WINDOWPOS_CENTERED, 
+                                       SDL_WINDOWPOS_CENTERED, 
+                                       800, 600, 
+                                       SDL_WINDOW_SHOWN);
     SDL_Renderer *rend = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED);
     TTF_Font *font = init_font();
 
@@ -199,6 +257,7 @@ int main(int argc, char *argv[]) {
                         SDL_Rect r = {50, y, 700, 60};
                         if (is_mouse_inside(r, mx, my)) {
                             ClientPacket pkt;
+                            memset(&pkt, 0, sizeof(pkt));
                             pkt.type = MSG_JOIN_LOBBY;
                             pkt.lobby_id = lobby_list[i].id;
                             send(sock, &pkt, sizeof(pkt), 0);
@@ -223,24 +282,39 @@ int main(int argc, char *argv[]) {
                     ClientPacket pkt;
                     memset(&pkt, 0, sizeof(pkt));
                     pkt.type = MSG_MOVE;
-                    int key = e.key.keysym.sym;
-                    if (key == SDLK_w) pkt.data = MOVE_UP;
-                    else if (key == SDLK_s) pkt.data = MOVE_DOWN;
-                    else if (key == SDLK_a) pkt.data = MOVE_LEFT;
-                    else if (key == SDLK_d) pkt.data = MOVE_RIGHT;
-                    else if (key == SDLK_SPACE) pkt.type = MSG_PLANT_BOMB;
+                    pkt.data = -1;
                     
-                    if (pkt.data >= 0 || pkt.type == MSG_PLANT_BOMB)
+                    int key = e.key.keysym.sym;
+                    if (key == SDLK_w || key == SDLK_UP) pkt.data = MOVE_UP;
+                    else if (key == SDLK_s || key == SDLK_DOWN) pkt.data = MOVE_DOWN;
+                    else if (key == SDLK_a || key == SDLK_LEFT) pkt.data = MOVE_LEFT;
+                    else if (key == SDLK_d || key == SDLK_RIGHT) pkt.data = MOVE_RIGHT;
+                    else if (key == SDLK_SPACE) {
+                        pkt.type = MSG_PLANT_BOMB;
+                        pkt.data = 0;
+                    }
+                    
+                    if (pkt.data >= 0 || pkt.type == MSG_PLANT_BOMB) {
                         send(sock, &pkt, sizeof(pkt), 0);
+                    }
                 }
             }
         }
 
-        // --- Network Receiving ---
+        // --- IMPROVED: Network Receiving với proper buffer handling ---
         ServerPacket spkt;
-        int n = recv(sock, &spkt, sizeof(spkt), MSG_DONTWAIT);
-        if (n > 0) {
+        int recv_result;
+        
+        // Nhận nhiều packets nếu có (tránh lag)
+        int packets_received = 0;
+        while ((recv_result = receive_server_packet(&spkt)) == 1 && packets_received < 10) {
             process_server_packet(&spkt);
+            packets_received++;
+        }
+        
+        if (recv_result < 0) {
+            printf("Server disconnected!\n");
+            running = 0;
         }
 
         // --- Rendering ---
@@ -264,9 +338,10 @@ int main(int argc, char *argv[]) {
             render_game(rend, font, tick++);
         }
 
-        SDL_Delay(16);
+        SDL_Delay(16); // ~60 FPS
     }
 
+    close(sock);
     SDL_DestroyRenderer(rend);
     SDL_DestroyWindow(win);
     TTF_CloseFont(font);
