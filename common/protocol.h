@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#define PORT 8080
+#define PORT 8081
 #define MAX_CLIENTS 4
 #define MAX_LOBBIES 10
 #define MAX_USERNAME 32
