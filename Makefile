@@ -3,7 +3,7 @@ CFLAGS = -Wall -Wextra -Icommon
 
 # SDL2 (client dùng)
 SDL_CFLAGS = `sdl2-config --cflags`
-SDL_LIBS = `sdl2-config --libs` -lSDL2_image -lSDL2_ttf -lSDL2_mixer
+SDL_LIBS = `sdl2-config --libs` -lSDL2_image -lSDL2_ttf -lSDL2_mixer -lm
 
 # ---- DIRECTORIES ----
 CLIENT_SRC = $(wildcard client/*.c)

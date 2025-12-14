@@ -20,6 +20,9 @@
 #define WALL_SOFT 2
 #define BOMB 3
 #define EXPLOSION 4
+#define POWERUP_BOMB 5      // Tăng số bom
+#define POWERUP_FIRE 6      // Tăng tầm nổ
+#define POWERUP_SPEED 7     // Tăng tốc độ (dự phòng)
 
 // Message types - Client to Server
 #define MSG_REGISTER 1
@@ -68,13 +71,16 @@
 #define ERR_NOT_ENOUGH_PLAYERS 4
 #define ERR_ALREADY_IN_LOBBY 5
 
-// Player structure
+// Player structure - VỚI POWER-UPS
 typedef struct {
     int id;
     int x, y;
     int is_alive;
     int is_ready;
     char username[MAX_USERNAME];
+    int max_bombs;        // Số bom tối đa có thể đặt
+    int bomb_range;       // Tầm nổ
+    int current_bombs;    // Số bom đang đặt
 } Player;
 
 // Lobby structure

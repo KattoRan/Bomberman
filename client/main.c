@@ -1,4 +1,4 @@
-/* client/main.c */
+/* client/main.c - With Notifications System */
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
 #include <sys/socket.h>
@@ -11,6 +11,7 @@
 
 extern void render_game(SDL_Renderer*, TTF_Font*, int);
 extern TTF_Font* init_font();
+extern void add_notification(const char *text, SDL_Color color);
 
 // State
 typedef enum {
@@ -26,6 +27,8 @@ int sock;
 int my_player_id = -1;
 char my_username[MAX_USERNAME];
 char status_message[256] = "";
+char lobby_error_message[256] = "";
+Uint32 error_message_time = 0;
 
 // Data Store
 Lobby lobby_list[MAX_LOBBIES];
@@ -33,11 +36,11 @@ int lobby_count = 0;
 int selected_lobby_idx = -1;
 Lobby current_lobby;
 
-// --- SỬA ĐỔI QUAN TRỌNG: Đặt tên biến trùng với graphics.c ---
-GameState current_state; 
-// -------------------------------------------------------------
+// Game State (shared with graphics.c)
+GameState current_state;
+GameState previous_state;  // Để theo dõi thay đổi
 
-// UI Components Definitions
+// UI Components
 InputField inp_user = {{350, 200, 300, 40}, "", "Username:", 0, 30};
 InputField inp_pass = {{350, 300, 300, 40}, "", "Password:", 0, 30};
 Button btn_login = {{350, 400, 140, 50}, "Login", 0};
@@ -59,7 +62,7 @@ int is_mouse_inside(SDL_Rect rect, int mx, int my) {
 void handle_text_input(InputField *field, char c) {
     if (!field->is_active) return;
     int len = strlen(field->text);
-    if (c == '\b') { // Backspace
+    if (c == '\b') {
         if (len > 0) field->text[len-1] = '\0';
     } else if (len < field->max_length) {
         field->text[len] = c;
@@ -67,31 +70,74 @@ void handle_text_input(InputField *field, char c) {
     }
 }
 
-// --- IMPROVED: Network packet receiving với buffer handling ---
+int find_my_player_id(Lobby *lobby, const char *username) {
+    for (int i = 0; i < lobby->num_players; i++) {
+        if (strcmp(lobby->players[i].username, username) == 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+int all_players_ready(Lobby *lobby) {
+    for (int i = 0; i < lobby->num_players; i++) {
+        if (!lobby->players[i].is_ready) return 0;
+    }
+    return 1;
+}
+
+// Kiểm tra sự thay đổi trong game state
+void check_game_changes() {
+    // Kiểm tra người chơi chết
+    for (int i = 0; i < current_state.num_players; i++) {
+        if (previous_state.players[i].is_alive && !current_state.players[i].is_alive) {
+            char msg[128];
+            snprintf(msg, sizeof(msg), "%s đã bị tiêu diệt!", 
+                    current_state.players[i].username);
+            add_notification(msg, (SDL_Color){255, 68, 68, 255});
+        }
+        
+        // Kiểm tra power-up
+        if (current_state.players[i].max_bombs > previous_state.players[i].max_bombs) {
+            if (i == 0) { // Chỉ thông báo cho người chơi hiện tại
+                add_notification("Nhặt được BOMB power-up! +1 Bom", 
+                               (SDL_Color){255, 215, 0, 255});
+            }
+        }
+        
+        if (current_state.players[i].bomb_range > previous_state.players[i].bomb_range) {
+            if (i == 0) {
+                add_notification("Nhặt được FIRE power-up! +1 Tầm nổ", 
+                               (SDL_Color){255, 69, 0, 255});
+            }
+        }
+    }
+    
+    // Cập nhật previous state
+    memcpy(&previous_state, &current_state, sizeof(GameState));
+}
+
+// --- Network packet receiving ---
 int receive_server_packet(ServerPacket *out_packet) {
     static char buffer[sizeof(ServerPacket)];
     static int bytes_received = 0;
     
-    // Nhận thêm dữ liệu
     int n = recv(sock, buffer + bytes_received, 
                  sizeof(ServerPacket) - bytes_received, MSG_DONTWAIT);
     
     if (n > 0) {
         bytes_received += n;
         
-        // Đã nhận đủ một packet
         if (bytes_received == sizeof(ServerPacket)) {
             memcpy(out_packet, buffer, sizeof(ServerPacket));
             bytes_received = 0;
-            return 1; // Success
+            return 1;
         }
     } else if (n == 0) {
-        // Server closed connection
         return -1;
     }
-    // n < 0 với MSG_DONTWAIT: EAGAIN/EWOULDBLOCK = không có data
     
-    return 0; // Chưa đủ dữ liệu
+    return 0;
 }
 
 // --- Network Functions ---
@@ -111,8 +157,10 @@ void process_server_packet(ServerPacket *pkt) {
                 current_screen = SCREEN_LOBBY_LIST;
                 send_packet(MSG_LIST_LOBBIES, 0); 
                 strncpy(my_username, inp_user.text, MAX_USERNAME);
+                status_message[0] = '\0';
+            } else {
+                strncpy(status_message, pkt->message, sizeof(status_message));
             }
-            strncpy(status_message, pkt->message, sizeof(status_message));
             break;
 
         case MSG_LOBBY_LIST:
@@ -122,33 +170,56 @@ void process_server_packet(ServerPacket *pkt) {
 
         case MSG_LOBBY_UPDATE:
             current_lobby = pkt->payload.lobby;
+            
+            my_player_id = -1;
+            for (int i = 0; i < current_lobby.num_players; i++) {
+                if (strcmp(current_lobby.players[i].username, my_username) == 0) {
+                    my_player_id = i;
+                    break;
+                }
+            }
+            
+            printf("[CLIENT] My player_id: %d, Host_id: %d\n", my_player_id, current_lobby.host_id);
+            
             if (current_lobby.status == LOBBY_PLAYING) {
+                if (current_screen != SCREEN_GAME) {
+                    add_notification("Game đã bắt đầu!", (SDL_Color){0, 255, 0, 255});
+                }
                 current_screen = SCREEN_GAME;
-                
-                // Reset game state khi bắt đầu game
                 memset(&current_state, 0, sizeof(GameState));
+                memset(&previous_state, 0, sizeof(GameState));
+                lobby_error_message[0] = '\0';
             } else {
                 current_screen = SCREEN_LOBBY_ROOM;
             }
             break;
 
         case MSG_GAME_STATE:
-            // --- SỬA ĐỔI: Cập nhật trực tiếp vào current_state ---
             current_state = pkt->payload.game_state;
+            check_game_changes();
             
-            // THÊM: Tự động quay về lobby nếu game ended
             if (current_state.game_status == GAME_ENDED) {
-                printf("\n╔════════════════════════════╗\n");
+                printf("\n╔═══════════════════════╗\n");
                 printf("║      GAME ENDED!           ║\n");
                 if (current_state.winner_id >= 0) {
                     printf("║  Winner: %s\n", 
                            current_state.players[current_state.winner_id].username);
+                    
+                    char msg[128];
+                    if (current_state.winner_id == 0) {
+                        snprintf(msg, sizeof(msg), "🎉 Chúc mừng! Bạn đã chiến thắng! 🎉");
+                        add_notification(msg, (SDL_Color){0, 255, 0, 255});
+                    } else {
+                        snprintf(msg, sizeof(msg), "%s đã chiến thắng!", 
+                                current_state.players[current_state.winner_id].username);
+                        add_notification(msg, (SDL_Color){255, 215, 0, 255});
+                    }
                 } else {
                     printf("║      Draw!                 ║\n");
+                    add_notification("Trận đấu hòa!", (SDL_Color){200, 200, 200, 255});
                 }
-                printf("╚════════════════════════════╝\n\n");
+                printf("╚═══════════════════════╝\n\n");
                 
-                // Sau 3 giây tự động về lobby
                 SDL_Delay(3000);
                 current_screen = SCREEN_LOBBY_ROOM;
             }
@@ -156,6 +227,7 @@ void process_server_packet(ServerPacket *pkt) {
             
         case MSG_ERROR:
             strncpy(status_message, pkt->message, sizeof(status_message));
+            strncpy(lobby_error_message, pkt->message, sizeof(lobby_error_message));
             break;
     }
 }
@@ -163,7 +235,6 @@ void process_server_packet(ServerPacket *pkt) {
 // --- Main Client ---
 
 int main(int argc, char *argv[]) {
-    // Suppress unused parameter warnings
     (void)argc;
     (void)argv;
 
@@ -179,7 +250,6 @@ int main(int argc, char *argv[]) {
         return -1;
     }
     
-    // Set socket non-blocking
     int flags = fcntl(sock, F_GETFL, 0);
     fcntl(sock, F_SETFL, flags | O_NONBLOCK);
     
@@ -194,7 +264,18 @@ int main(int argc, char *argv[]) {
                                        800, 600, 
                                        SDL_WINDOW_SHOWN);
     SDL_Renderer *rend = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED);
-    TTF_Font *font = init_font();
+    
+    TTF_Font *font_large = TTF_OpenFont("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 48);
+    if (!font_large) {
+        font_large = TTF_OpenFont("C:\\Windows\\Fonts\\arialbd.ttf", 48);
+    }
+    
+    TTF_Font *font_small = init_font();
+    
+    if (!font_small) {
+        printf("Failed to load font!\n");
+        return -1;
+    }
 
     SDL_StartTextInput();
     int running = 1;
@@ -209,103 +290,173 @@ int main(int argc, char *argv[]) {
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_QUIT) running = 0;
 
-            if (current_screen == SCREEN_LOGIN) {
-                if (e.type == SDL_MOUSEBUTTONDOWN) {
-                    inp_user.is_active = is_mouse_inside(inp_user.rect, mx, my);
-                    inp_pass.is_active = is_mouse_inside(inp_pass.rect, mx, my);
+            switch (current_screen) {
+                case SCREEN_LOGIN:
+                    if (e.type == SDL_MOUSEBUTTONDOWN) {
+                        inp_user.is_active = is_mouse_inside(inp_user.rect, mx, my);
+                        inp_pass.is_active = is_mouse_inside(inp_pass.rect, mx, my);
+                        
+                        if (is_mouse_inside(btn_login.rect, mx, my)) {
+                            if (strlen(inp_user.text) > 0 && strlen(inp_pass.text) > 0) {
+                                ClientPacket pkt;
+                                memset(&pkt, 0, sizeof(pkt));
+                                pkt.type = MSG_LOGIN;
+                                strcpy(pkt.username, inp_user.text);
+                                strcpy(pkt.password, inp_pass.text);
+                                send(sock, &pkt, sizeof(pkt), 0);
+                            } else {
+                                strncpy(status_message, "Please enter username and password", sizeof(status_message));
+                            }
+                        }
+                        
+                        if (is_mouse_inside(btn_reg.rect, mx, my)) {
+                            if (strlen(inp_user.text) > 0 && strlen(inp_pass.text) > 0) {
+                                ClientPacket pkt;
+                                memset(&pkt, 0, sizeof(pkt));
+                                pkt.type = MSG_REGISTER;
+                                strcpy(pkt.username, inp_user.text);
+                                strcpy(pkt.password, inp_pass.text);
+                                send(sock, &pkt, sizeof(pkt), 0);
+                            } else {
+                                strncpy(status_message, "Please enter username and password", sizeof(status_message));
+                            }
+                        }
+                    }
                     
-                    if (is_mouse_inside(btn_login.rect, mx, my)) {
-                        ClientPacket pkt;
-                        memset(&pkt, 0, sizeof(pkt));
-                        pkt.type = MSG_LOGIN;
-                        strcpy(pkt.username, inp_user.text);
-                        strcpy(pkt.password, inp_pass.text);
-                        send(sock, &pkt, sizeof(pkt), 0);
+                    if (e.type == SDL_TEXTINPUT) {
+                        if (inp_user.is_active) handle_text_input(&inp_user, e.text.text[0]);
+                        if (inp_pass.is_active) handle_text_input(&inp_pass, e.text.text[0]);
                     }
-                    if (is_mouse_inside(btn_reg.rect, mx, my)) {
-                         ClientPacket pkt;
-                        memset(&pkt, 0, sizeof(pkt));
-                        pkt.type = MSG_REGISTER;
-                        strcpy(pkt.username, inp_user.text);
-                        strcpy(pkt.password, inp_pass.text);
-                        send(sock, &pkt, sizeof(pkt), 0);
+                    
+                    if (e.type == SDL_KEYDOWN) {
+                        if (e.key.keysym.sym == SDLK_BACKSPACE) {
+                            if (inp_user.is_active) handle_text_input(&inp_user, '\b');
+                            if (inp_pass.is_active) handle_text_input(&inp_pass, '\b');
+                        }
+                        if (e.key.keysym.sym == SDLK_RETURN || e.key.keysym.sym == SDLK_KP_ENTER) {
+                            if (strlen(inp_user.text) > 0 && strlen(inp_pass.text) > 0) {
+                                ClientPacket pkt;
+                                memset(&pkt, 0, sizeof(pkt));
+                                pkt.type = MSG_LOGIN;
+                                strcpy(pkt.username, inp_user.text);
+                                strcpy(pkt.password, inp_pass.text);
+                                send(sock, &pkt, sizeof(pkt), 0);
+                            }
+                        }
+                        if (e.key.keysym.sym == SDLK_TAB) {
+                            if (inp_user.is_active) {
+                                inp_user.is_active = 0;
+                                inp_pass.is_active = 1;
+                            } else if (inp_pass.is_active) {
+                                inp_pass.is_active = 0;
+                                inp_user.is_active = 1;
+                            } else {
+                                inp_user.is_active = 1;
+                            }
+                        }
                     }
-                }
-                if (e.type == SDL_TEXTINPUT) {
-                    if (inp_user.is_active) handle_text_input(&inp_user, e.text.text[0]);
-                    if (inp_pass.is_active) handle_text_input(&inp_pass, e.text.text[0]);
-                }
-                if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_BACKSPACE) {
-                     if (inp_user.is_active) handle_text_input(&inp_user, '\b');
-                     if (inp_pass.is_active) handle_text_input(&inp_pass, '\b');
-                }
-            }
-            else if (current_screen == SCREEN_LOBBY_LIST) {
-                if (e.type == SDL_MOUSEBUTTONDOWN) {
-                    if (is_mouse_inside(btn_create.rect, mx, my)) {
-                        ClientPacket pkt;
-                        memset(&pkt, 0, sizeof(pkt));
-                        pkt.type = MSG_CREATE_LOBBY;
-                        strcpy(pkt.room_name, "New Room");
-                        send(sock, &pkt, sizeof(pkt), 0);
-                    }
-                    if (is_mouse_inside(btn_refresh.rect, mx, my)) {
-                        send_packet(MSG_LIST_LOBBIES, 0);
-                    }
-                    int y = 80;
-                    for (int i=0; i<lobby_count; i++) {
-                        SDL_Rect r = {50, y, 700, 60};
-                        if (is_mouse_inside(r, mx, my)) {
+                    break;
+                    
+                case SCREEN_LOBBY_LIST:
+                    if (e.type == SDL_MOUSEBUTTONDOWN) {
+                        if (is_mouse_inside(btn_create.rect, mx, my)) {
                             ClientPacket pkt;
                             memset(&pkt, 0, sizeof(pkt));
-                            pkt.type = MSG_JOIN_LOBBY;
-                            pkt.lobby_id = lobby_list[i].id;
+                            pkt.type = MSG_CREATE_LOBBY;
+                            snprintf(pkt.room_name, sizeof(pkt.room_name), "Room %d", lobby_count + 1);
                             send(sock, &pkt, sizeof(pkt), 0);
                         }
-                        y += 70;
+                        if (is_mouse_inside(btn_refresh.rect, mx, my)) {
+                            send_packet(MSG_LIST_LOBBIES, 0);
+                        }
+                        
+                        int win_w, win_h;
+                        SDL_GetRendererOutputSize(rend, &win_w, &win_h);
+                        int list_width = 700;
+                        int start_x = (win_w - list_width) / 2;
+                        int y = 100;
+                        
+                        for (int i = 0; i < lobby_count; i++) {
+                            SDL_Rect r = {start_x, y, list_width, 70};
+                            if (is_mouse_inside(r, mx, my)) {
+                                ClientPacket pkt;
+                                memset(&pkt, 0, sizeof(pkt));
+                                pkt.type = MSG_JOIN_LOBBY;
+                                pkt.lobby_id = lobby_list[i].id;
+                                send(sock, &pkt, sizeof(pkt), 0);
+                                selected_lobby_idx = i;
+                                break;
+                            }
+                            y += 85;
+                        }
                     }
-                }
-            }
-            else if (current_screen == SCREEN_LOBBY_ROOM) {
-                if (e.type == SDL_MOUSEBUTTONDOWN) {
-                    if (is_mouse_inside(btn_ready.rect, mx, my)) send_packet(MSG_READY, 0);
-                    if (is_mouse_inside(btn_start.rect, mx, my)) send_packet(MSG_START_GAME, 0);
-                    if (is_mouse_inside(btn_leave.rect, mx, my)) {
-                        send_packet(MSG_LEAVE_LOBBY, 0);
-                        current_screen = SCREEN_LOBBY_LIST;
-                        send_packet(MSG_LIST_LOBBIES, 0);
-                    }
-                }
-            }
-            else if (current_screen == SCREEN_GAME) {
-                if (e.type == SDL_KEYDOWN) {
-                    ClientPacket pkt;
-                    memset(&pkt, 0, sizeof(pkt));
-                    pkt.type = MSG_MOVE;
-                    pkt.data = -1;
+                    break;
                     
-                    int key = e.key.keysym.sym;
-                    if (key == SDLK_w || key == SDLK_UP) pkt.data = MOVE_UP;
-                    else if (key == SDLK_s || key == SDLK_DOWN) pkt.data = MOVE_DOWN;
-                    else if (key == SDLK_a || key == SDLK_LEFT) pkt.data = MOVE_LEFT;
-                    else if (key == SDLK_d || key == SDLK_RIGHT) pkt.data = MOVE_RIGHT;
-                    else if (key == SDLK_SPACE) {
-                        pkt.type = MSG_PLANT_BOMB;
-                        pkt.data = 0;
+                case SCREEN_LOBBY_ROOM:
+                    if (e.type == SDL_MOUSEBUTTONDOWN) {
+                        if (is_mouse_inside(btn_leave.rect, mx, my)) {
+                            send_packet(MSG_LEAVE_LOBBY, 0);
+                            current_screen = SCREEN_LOBBY_LIST;
+                            send_packet(MSG_LIST_LOBBIES, 0);
+                            lobby_error_message[0] = '\0';
+                        }
+                        else if (my_player_id != current_lobby.host_id) {
+                            if (is_mouse_inside(btn_ready.rect, mx, my)) {
+                                send_packet(MSG_READY, 0);
+                                lobby_error_message[0] = '\0';
+                            }
+                        }
+                        else if (my_player_id == current_lobby.host_id) {
+                            if (is_mouse_inside(btn_start.rect, mx, my)) {
+                                if (current_lobby.num_players < 2) {
+                                    strncpy(lobby_error_message, "Need at least 2 players to start!", 
+                                           sizeof(lobby_error_message));
+                                    error_message_time = SDL_GetTicks();
+                                } else if (!all_players_ready(&current_lobby)) {
+                                    strncpy(lobby_error_message, "All players must be ready!", 
+                                           sizeof(lobby_error_message));
+                                    error_message_time = SDL_GetTicks();
+                                } else {
+                                    send_packet(MSG_START_GAME, 0);
+                                    lobby_error_message[0] = '\0';
+                                }
+                            }
+                        }
                     }
+                    break;
                     
-                    if (pkt.data >= 0 || pkt.type == MSG_PLANT_BOMB) {
-                        send(sock, &pkt, sizeof(pkt), 0);
+                case SCREEN_GAME:
+                    if (e.type == SDL_KEYDOWN) {
+                        ClientPacket pkt;
+                        memset(&pkt, 0, sizeof(pkt));
+                        pkt.type = MSG_MOVE;
+                        pkt.data = -1;
+                        
+                        int key = e.key.keysym.sym;
+                        if (key == SDLK_w || key == SDLK_UP) pkt.data = MOVE_UP;
+                        else if (key == SDLK_s || key == SDLK_DOWN) pkt.data = MOVE_DOWN;
+                        else if (key == SDLK_a || key == SDLK_LEFT) pkt.data = MOVE_LEFT;
+                        else if (key == SDLK_d || key == SDLK_RIGHT) pkt.data = MOVE_RIGHT;
+                        else if (key == SDLK_SPACE) {
+                            pkt.type = MSG_PLANT_BOMB;
+                            pkt.data = 0;
+                        }
+                        
+                        if (pkt.data >= 0 || pkt.type == MSG_PLANT_BOMB) {
+                            send(sock, &pkt, sizeof(pkt), 0);
+                        }
                     }
-                }
+                    break;
+                    
+                default:
+                    break;
             }
         }
 
-        // --- IMPROVED: Network Receiving với proper buffer handling ---
+        // --- Network Receiving ---
         ServerPacket spkt;
         int recv_result;
         
-        // Nhận nhiều packets nếu có (tránh lag)
         int packets_received = 0;
         while ((recv_result = receive_server_packet(&spkt)) == 1 && packets_received < 10) {
             process_server_packet(&spkt);
@@ -318,24 +469,65 @@ int main(int argc, char *argv[]) {
         }
 
         // --- Rendering ---
-        if (current_screen == SCREEN_LOGIN) {
-            btn_login.is_hovered = is_mouse_inside(btn_login.rect, mx, my);
-            btn_reg.is_hovered = is_mouse_inside(btn_reg.rect, mx, my);
-            render_login_screen(rend, font, &inp_user, &inp_pass, &btn_login, &btn_reg, status_message);
+        if (lobby_error_message[0] != '\0' && SDL_GetTicks() - error_message_time > 3000) {
+            lobby_error_message[0] = '\0';
         }
-        else if (current_screen == SCREEN_LOBBY_LIST) {
-            btn_create.is_hovered = is_mouse_inside(btn_create.rect, mx, my);
-            btn_refresh.is_hovered = is_mouse_inside(btn_refresh.rect, mx, my);
-            render_lobby_list_screen(rend, font, lobby_list, lobby_count, &btn_create, &btn_refresh, selected_lobby_idx);
-        }
-        else if (current_screen == SCREEN_LOBBY_ROOM) {
-            btn_ready.is_hovered = is_mouse_inside(btn_ready.rect, mx, my);
-            btn_start.is_hovered = is_mouse_inside(btn_start.rect, mx, my);
-            btn_leave.is_hovered = is_mouse_inside(btn_leave.rect, mx, my);
-            render_lobby_room_screen(rend, font, &current_lobby, 0, &btn_ready, &btn_start, &btn_leave);
-        }
-        else if (current_screen == SCREEN_GAME) {
-            render_game(rend, font, tick++);
+        
+        switch (current_screen) {
+            case SCREEN_LOGIN: {
+                btn_login.is_hovered = is_mouse_inside(btn_login.rect, mx, my);
+                btn_reg.is_hovered = is_mouse_inside(btn_reg.rect, mx, my);
+
+                render_login_screen(
+                    rend, font_large, font_small,
+                    &inp_user, &inp_pass,
+                    &btn_login, &btn_reg, status_message
+                );
+                break;
+            }
+
+            case SCREEN_LOBBY_LIST: {
+                btn_create.is_hovered = is_mouse_inside(btn_create.rect, mx, my);
+                btn_refresh.is_hovered = is_mouse_inside(btn_refresh.rect, mx, my);
+
+                render_lobby_list_screen(
+                    rend, font_small,
+                    lobby_list, lobby_count,
+                    &btn_create, &btn_refresh,
+                    selected_lobby_idx
+                );
+                break;
+            }
+
+            case SCREEN_LOBBY_ROOM: {
+                if (my_player_id == current_lobby.host_id) {
+                    btn_start.is_hovered = is_mouse_inside(btn_start.rect, mx, my);
+                    btn_leave.is_hovered = is_mouse_inside(btn_leave.rect, mx, my);
+                    btn_ready.is_hovered = 0;
+                } else {
+                    btn_ready.is_hovered = is_mouse_inside(btn_ready.rect, mx, my);
+                    btn_leave.is_hovered = is_mouse_inside(btn_leave.rect, mx, my);
+                    btn_start.is_hovered = 0;
+                }
+
+                Button *ready_ptr = (my_player_id != current_lobby.host_id) ? &btn_ready : NULL;
+                Button *start_ptr = (my_player_id == current_lobby.host_id) ? &btn_start : NULL;
+
+                render_lobby_room_screen(
+                    rend, font_small,
+                    &current_lobby, my_player_id,
+                    ready_ptr, start_ptr, &btn_leave
+                );
+                break;
+            }
+
+            case SCREEN_GAME: {
+                render_game(rend, font_small, tick++);
+                break;
+            }
+
+            default:
+                break;
         }
 
         SDL_Delay(16); // ~60 FPS
@@ -344,7 +536,8 @@ int main(int argc, char *argv[]) {
     close(sock);
     SDL_DestroyRenderer(rend);
     SDL_DestroyWindow(win);
-    TTF_CloseFont(font);
+    if (font_large) TTF_CloseFont(font_large);
+    if (font_small) TTF_CloseFont(font_small);
     TTF_Quit();
     SDL_Quit();
     return 0;

@@ -22,8 +22,11 @@ typedef struct {
     int max_length;
 } InputField;
 
+// Biến toàn cục cho thông báo lỗi trong lobby room
+extern char lobby_error_message[256];
+
 // Khai báo các hàm UI (Prototype)
-void render_login_screen(SDL_Renderer *renderer, TTF_Font *font, 
+void render_login_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Font *font_small, 
                         InputField *username, InputField *password,
                         Button *login_btn, Button *register_btn, 
                         const char *message);
