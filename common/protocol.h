@@ -38,13 +38,16 @@
 #define MSG_MOVE 10
 #define MSG_PLANT_BOMB 11
 #define MSG_FRIEND_REQUEST 12
-#define MSG_FRIEND_RESPONSE 13
-#define MSG_FRIEND_LIST 14
-#define MSG_GET_PROFILE 15
-#define MSG_UPDATE_PROFILE 16
-#define MSG_GET_LEADERBOARD 17
-#define MSG_KICK_PLAYER 18
-#define MSG_SET_ROOM_PRIVATE 19
+#define MSG_FRIEND_ACCEPT 13
+#define MSG_FRIEND_DECLINE 14
+#define MSG_FRIEND_REMOVE 15
+#define MSG_FRIEND_RESPONSE 16
+#define MSG_FRIEND_LIST 17
+#define MSG_GET_PROFILE 18
+#define MSG_UPDATE_PROFILE 19
+#define MSG_GET_LEADERBOARD 20
+#define MSG_KICK_PLAYER 21
+#define MSG_SET_ROOM_PRIVATE 22
 
 // Message types - Server to Client
 #define MSG_AUTH_RESPONSE 20
@@ -161,12 +164,18 @@ typedef struct {
     char username[MAX_USERNAME];
     char password[MAX_PASSWORD];
     char email[MAX_EMAIL];             // For registration
-    char room_name[MAX_ROOM_NAME];
+    char display_name[MAX_DISPLAY_NAME]; // For profile updates, etc.
+    
+    // For friend operations
+    char target_display_name[MAX_DISPLAY_NAME]; // For friend requests
+    int target_user_id;  // For accept/decline/remove friend
+    
+    // For lobby
     int lobby_id;
+    char room_name[MAX_ROOM_NAME];     // For creating lobby
     int data;                          // Multi-purpose: direction, player_id, etc.
     char access_code[8];               // For joining private rooms
     int is_private;                    // For creating private rooms
-    char target_display_name[MAX_DISPLAY_NAME]; // For friend requests
     int target_player_id;              // For kick, spectator view
 } ClientPacket;
 

@@ -54,7 +54,7 @@ void render_profile_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Fon
                            ProfileData *profile,
                            Button *back_btn);
 
-void render_leaderboard_screen(SDL_Renderer *renderer, TTF_Font *font,
+void render_leaderboard_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Font *font_small,
                                LeaderboardEntry *entries, int entry_count,
                                Button *back_btn);
 

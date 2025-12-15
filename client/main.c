@@ -48,6 +48,8 @@ FriendInfo friends_list[50];
 int friends_count = 0;
 FriendInfo pending_requests[50];
 int pending_count = 0;
+FriendInfo sent_requests[50];  // Outgoing requests
+int sent_count = 0;
 ProfileData my_profile = {0};  // Initialize to zero
 LeaderboardEntry leaderboard[100];
 int leaderboard_count = 0;
@@ -86,6 +88,14 @@ const int NOTIFICATION_DURATION = 3000; // 3 seconds
 InputField inp_join_code = {{300, 250, 400, 40}, "", "Enter 6-digit access code:", 0, 6};
 int show_join_code_dialog = 0;
 int selected_private_lobby_id = -1;
+
+// Friend request UI
+InputField inp_friend_request = {{50, 550, 300, 40}, "", "Enter display name...", 0, 31};
+Button btn_send_friend_request = {{370, 550, 150, 40}, "Send Request", 0};
+
+// Delete friend confirmation
+int show_delete_confirm = 0;
+int delete_friend_index = -1;
 
 // --- Helper Functions ---
 
@@ -281,11 +291,54 @@ void process_server_packet(ServerPacket *pkt) {
             break;
             
         case MSG_FRIEND_LIST_RESPONSE:
-            friends_count = pkt->payload.friend_list.count;
-            if (friends_count > 50) friends_count = 50;
-            memcpy(friends_list, pkt->payload.friend_list.friends, 
-                   sizeof(FriendInfo) * friends_count);
-            printf("[CLIENT] Received %d friends\n", friends_count);
+            // Server sends: total count in payload.friend_list.count
+            // code field bit-packed: low byte = pending_count, high byte = sent_count
+            pending_count = pkt->code & 0xFF;  // Low byte
+            sent_count = (pkt->code >> 8) & 0xFF;  // High byte
+            friends_count = pkt->payload.friend_list.count - pending_count - sent_count;
+            
+            // Copy accepted friends (first part of array)
+            if (friends_count > 0 && friends_count <= 50) {
+                memcpy(friends_list, pkt->payload.friend_list.friends, 
+                       sizeof(FriendInfo) * friends_count);
+            }
+            
+            // Copy pending requests (second part)
+            if (pending_count > 0 && pending_count <= 50) {
+                memcpy(pending_requests, &pkt->payload.friend_list.friends[friends_count], 
+                       sizeof(FriendInfo) * pending_count);
+                
+                // Show notification for new pending requests
+                if (pending_count > 0) {
+                    snprintf(notification_message, sizeof(notification_message),
+                            "You have %d pending friend request%s!", pending_count, pending_count > 1 ? "s" : "");
+                    notification_time = SDL_GetTicks();
+                }
+            }
+            
+            // Copy sent requests (third part)
+            if (sent_count > 0 && sent_count <= 50) {
+                memcpy(sent_requests, &pkt->payload.friend_list.friends[friends_count + pending_count],
+                       sizeof(FriendInfo) * sent_count);
+            }
+            
+            printf("[CLIENT] Received %d friends, %d pending, %d sent\\n", friends_count, pending_count, sent_count);
+            break;
+        
+        case MSG_FRIEND_RESPONSE:
+            if (pkt->code == 0) {
+                // Success - show notification
+                snprintf(notification_message, sizeof(notification_message),
+                        "Friend request sent!");
+                notification_time = SDL_GetTicks();
+                // Refresh friends list
+                send_packet(MSG_FRIEND_LIST, 0);
+            } else {
+                // Error
+                snprintf(notification_message, sizeof(notification_message),
+                        "Request failed");
+                notification_time = SDL_GetTicks();
+            }
             break;
             
         case MSG_PROFILE_RESPONSE:
@@ -692,9 +745,129 @@ int main(int argc, char *argv[]) {
                 case SCREEN_FRIENDS:
                 case SCREEN_PROFILE:
                 case SCREEN_LEADERBOARD:
+                    // Handle delete friend confirmation dialog first
+                    if (current_screen == SCREEN_FRIENDS && show_delete_confirm) {
+                        if (e.type == SDL_MOUSEBUTTONDOWN) {
+                            SDL_Rect yes_btn = {300, 350, 100, 40};
+                            SDL_Rect no_btn = {420, 350, 100, 40};
+                            
+                            if (is_mouse_inside(yes_btn, mx, my)) {
+                                // Confirm delete
+                                if (delete_friend_index >= 0 && delete_friend_index < friends_count) {
+                                    ClientPacket pkt;
+                                    memset(&pkt, 0, sizeof(pkt));
+                                    pkt.type = MSG_FRIEND_REMOVE;
+                                    pkt.target_user_id = friends_list[delete_friend_index].user_id;
+                                    send(sock, &pkt, sizeof(pkt), 0);
+                                    
+                                    snprintf(notification_message, sizeof(notification_message),
+                                            "Removed %s from friends", friends_list[delete_friend_index].display_name);
+                                    notification_time = SDL_GetTicks();
+                                }
+                                show_delete_confirm = 0;
+                                delete_friend_index = -1;
+                            }
+                            
+                            if (is_mouse_inside(no_btn, mx, my)) {
+                                show_delete_confirm = 0;
+                                delete_friend_index = -1;
+                            }
+                        }
+                        
+                        if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE) {
+                            show_delete_confirm = 0;
+                            delete_friend_index = -1;
+                        }
+                        break;
+                    }
+                    
                     if (e.type == SDL_MOUSEBUTTONDOWN) {
-                        // Need to check against the actual button rect from rendering
-                        // For now, use a fixed rect at bottom center
+                        // Handle friend request sending
+                        if (current_screen == SCREEN_FRIENDS) {
+                            inp_friend_request.is_active = is_mouse_inside(inp_friend_request.rect, mx, my);
+                            
+                            // Check Remove button for friends
+                            int list_y = 140;  // Match rendering position
+                            for (int i = 0; i < friends_count && i < 5; i++) {
+                                SDL_Rect remove_btn = {360, list_y + 18, 30, 24};
+                                SDL_Rect card = {50, list_y, 350, 60};
+                                
+                                if (is_mouse_inside(remove_btn, mx, my)) {
+                                    // Show delete confirmation dialog
+                                    show_delete_confirm = 1;
+                                    delete_friend_index = i;
+                                    break;
+                                }
+                                
+                                // Click card to view profile
+                                if (is_mouse_inside(card, mx, my) && !is_mouse_inside(remove_btn, mx, my)) {
+                                    // Request friend's profile
+                                    ClientPacket pkt;
+                                    memset(&pkt, 0, sizeof(pkt));
+                                    pkt.type = MSG_GET_PROFILE;
+                                    pkt.target_user_id = friends_list[i].user_id;
+                                    send(sock, &pkt, sizeof(pkt), 0);
+                                    current_screen = SCREEN_PROFILE;
+                                    break;
+                                }
+                                
+                                list_y += 70;
+                            }
+                            
+                            // Check Accept/Decline buttons for pending requests
+                            int pending_y = 140;  // Match rendering position
+                            for (int i = 0; i < pending_count && i < 5; i++) {
+                                SDL_Rect accept_btn = {460, pending_y + 32, 80, 22};
+                                SDL_Rect decline_btn = {550, pending_y + 32, 80, 22};
+                                
+                                if (is_mouse_inside(accept_btn, mx, my)) {
+                                    // Accept friend request
+                                    ClientPacket pkt;
+                                    memset(&pkt, 0, sizeof(pkt));
+                                    pkt.type = MSG_FRIEND_ACCEPT;
+                                    pkt.target_user_id = pending_requests[i].user_id;
+                                    send(sock, &pkt, sizeof(pkt), 0);
+                                    
+                                    snprintf(notification_message, sizeof(notification_message),
+                                            "Accepted %s's friend request!", pending_requests[i].display_name);
+                                    notification_time = SDL_GetTicks();
+                                    break;
+                                }
+                                
+                                if (is_mouse_inside(decline_btn, mx, my)) {
+                                    // Decline friend request
+                                    ClientPacket pkt;
+                                    memset(&pkt, 0, sizeof(pkt));
+                                    pkt.type = MSG_FRIEND_DECLINE;
+                                    pkt.target_user_id = pending_requests[i].user_id;
+                                    send(sock, &pkt, sizeof(pkt), 0);
+                                    
+                                    snprintf(notification_message, sizeof(notification_message),
+                                            "Declined friend request");
+                                    notification_time = SDL_GetTicks();
+                                    break;
+                                }
+                                
+                                pending_y += 70;
+                            }
+                            
+                            if (is_mouse_inside(btn_send_friend_request.rect, mx, my)) {
+                                if (strlen(inp_friend_request.text) > 0) {
+                                    ClientPacket pkt;
+                                    memset(&pkt, 0, sizeof(pkt));
+                                    pkt.type = MSG_FRIEND_REQUEST;
+                                    strncpy(pkt.target_display_name, inp_friend_request.text, MAX_DISPLAY_NAME - 1);
+                                    send(sock, &pkt, sizeof(pkt), 0);
+                                    
+                                    snprintf(notification_message, sizeof(notification_message), 
+                                            "Friend request sent to %s!", inp_friend_request.text);
+                                    notification_time = SDL_GetTicks();
+                                    inp_friend_request.text[0] = '\0';
+                                }
+                            }
+                        }
+                        
+                        // Back button for all screens
                         int win_w, win_h;
                         SDL_GetRendererOutputSize(rend, &win_w, &win_h);
                         SDL_Rect back_rect = {win_w/2 - 75, win_h - 100, 150, 50};
@@ -702,6 +875,17 @@ int main(int argc, char *argv[]) {
                         if (is_mouse_inside(back_rect, mx, my)) {
                             current_screen = SCREEN_LOBBY_LIST;
                             send_packet(MSG_LIST_LOBBIES, 0);
+                        }
+                    }
+                    
+                    // Text input for friend requests
+                    if (current_screen == SCREEN_FRIENDS && e.type == SDL_TEXTINPUT && inp_friend_request.is_active) {
+                        handle_text_input(&inp_friend_request, e.text.text[0]);
+                    }
+                    
+                    if (current_screen == SCREEN_FRIENDS && e.type == SDL_KEYDOWN && inp_friend_request.is_active) {
+                        if (e.key.keysym.sym == SDLK_BACKSPACE) {
+                            handle_text_input(&inp_friend_request, '\b');
                         }
                     }
                     break;
@@ -873,8 +1057,83 @@ int main(int argc, char *argv[]) {
             case SCREEN_FRIENDS: {
                 Button back_btn;
                 back_btn.is_hovered = is_mouse_inside(back_btn.rect, mx, my);
+                btn_send_friend_request.is_hovered = is_mouse_inside(btn_send_friend_request.rect, mx, my);
+                
                 render_friends_screen(rend, font_small, friends_list, friends_count,
                                      pending_requests, pending_count, &back_btn);
+                
+                // Draw friend request input and button
+                draw_input_field(rend, font_small, &inp_friend_request);
+                draw_button(rend, font_small, &btn_send_friend_request);
+                
+                // Draw delete confirmation dialog if active
+                if (show_delete_confirm && delete_friend_index >= 0 && delete_friend_index < friends_count) {
+                    int win_w, win_h;
+                    SDL_GetRendererOutputSize(rend, &win_w, &win_h);
+                    
+                    // Semi-transparent overlay
+                    SDL_SetRenderDrawBlendMode(rend, SDL_BLENDMODE_BLEND);
+                    SDL_SetRenderDrawColor(rend, 0, 0, 0, 180);
+                    SDL_Rect overlay = {0, 0, win_w, win_h};
+                    SDL_RenderFillRect(rend, &overlay);
+                    
+                    // Dialog box
+                    SDL_Rect dialog = {250, 250, 300, 150};
+                    SDL_SetRenderDrawColor(rend, 30, 41, 59, 255);
+                    SDL_RenderFillRect(rend, &dialog);
+                    SDL_SetRenderDrawColor(rend, 59, 130, 246, 255);
+                    SDL_RenderDrawRect(rend, &dialog);
+                    
+                    // Title
+                    SDL_Surface *surf = TTF_RenderText_Blended(font_small, "Delete Friend?", (SDL_Color){255, 255, 255, 255});
+                    if (surf) {
+                        SDL_Texture *tex = SDL_CreateTextureFromSurface(rend, surf);
+                        SDL_Rect r = {dialog.x + (dialog.w - surf->w)/2, dialog.y + 20, surf->w, surf->h};
+                        SDL_RenderCopy(rend, tex, NULL, &r);
+                        SDL_DestroyTexture(tex);
+                        SDL_FreeSurface(surf);
+                    }
+                    
+                    // Friend name
+                    char msg[128];
+                    snprintf(msg, sizeof(msg), "Remove %s?", friends_list[delete_friend_index].display_name);
+                    surf = TTF_RenderText_Blended(font_small, msg, (SDL_Color){200, 200, 200, 255});
+                    if (surf) {
+                        SDL_Texture *tex = SDL_CreateTextureFromSurface(rend, surf);
+                        SDL_Rect r = {dialog.x + (dialog.w - surf->w)/2, dialog.y + 60, surf->w, surf->h};
+                        SDL_RenderCopy(rend, tex, NULL, &r);
+                        SDL_DestroyTexture(tex);
+                        SDL_FreeSurface(surf);
+                    }
+                    
+                    // Yes button (red)
+                    SDL_Rect yes_btn = {300, 350, 100, 40};
+                    SDL_SetRenderDrawColor(rend, 239, 68, 68, 255);
+                    SDL_RenderFillRect(rend, &yes_btn);
+                    surf = TTF_RenderText_Blended(font_small, "Yes", (SDL_Color){255, 255, 255, 255});
+                    if (surf) {
+                        SDL_Texture *tex = SDL_CreateTextureFromSurface(rend, surf);
+                        SDL_Rect r = {yes_btn.x + (yes_btn.w - surf->w)/2, yes_btn.y + (yes_btn.h - surf->h)/2, surf->w, surf->h};
+                        SDL_RenderCopy(rend, tex, NULL, &r);
+                        SDL_DestroyTexture(tex);
+                        SDL_FreeSurface(surf);
+                    }
+                    
+                    // No button (gray)
+                    SDL_Rect no_btn = {420, 350, 100, 40};
+                    SDL_SetRenderDrawColor(rend, 100, 116, 139, 255);
+                    SDL_RenderFillRect(rend, &no_btn);
+                    surf = TTF_RenderText_Blended(font_small, "No", (SDL_Color){255, 255, 255, 255});
+                    if (surf) {
+                        SDL_Texture *tex = SDL_CreateTextureFromSurface(rend, surf);
+                        SDL_Rect r = {no_btn.x + (no_btn.w - surf->w)/2, no_btn.y + (no_btn.h - surf->h)/2, surf->w, surf->h};
+                        SDL_RenderCopy(rend, tex, NULL, &r);
+                        SDL_DestroyTexture(tex);
+                        SDL_FreeSurface(surf);
+                    }
+                    
+                    SDL_SetRenderDrawBlendMode(rend, SDL_BLENDMODE_NONE);
+                }
                 break;
             }
             
@@ -888,7 +1147,7 @@ int main(int argc, char *argv[]) {
             case SCREEN_LEADERBOARD: {
                 Button back_btn;
                 back_btn.is_hovered = is_mouse_inside(back_btn.rect, mx, my);
-                render_leaderboard_screen(rend, font_small, leaderboard, leaderboard_count, &back_btn);
+                render_leaderboard_screen(rend, font_large, font_small, leaderboard, leaderboard_count, &back_btn);
                 break;
             }
 

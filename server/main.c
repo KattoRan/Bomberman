@@ -23,6 +23,17 @@ typedef struct {
 
 ClientInfo clients[MAX_CLIENTS * MAX_LOBBIES];
 int num_clients = 0;
+
+// Helper function to check if a user is online
+int is_user_online(int user_id) {
+    for (int i = 0; i < num_clients; i++) {
+        if (clients[i].is_authenticated && clients[i].user_id == user_id) {
+            return 1;  // Online
+        }
+    }
+    return 0;  // Offline
+}
+
 GameState active_games[MAX_LOBBIES];
 
 // --- THÊM: Tracking game update timing ---
@@ -247,20 +258,148 @@ void handle_client_packet(int socket_fd, ClientPacket *pkt) {
                 } else {
                     strcpy(response.message, "Friend request failed");
                 }
-                send_response(socket_fd, &response);
-            }
+               send_response(socket_fd, &response);
             break;
+        }    
+        
+        case MSG_FRIEND_LIST: {
+            if (!client->is_authenticated) break;
+            response.type = MSG_FRIEND_LIST_RESPONSE;
             
-        case MSG_FRIEND_LIST:
+            // Get accepted friends
+            int friend_count = friend_get_list(client->user_id, 
+                                              response.payload.friend_list.friends, 50);
+            response.payload.friend_list.count = friend_count;
+            
+            // Get pending requests (incoming)
+            FriendInfo pending[50];
+            int pending_count = friend_get_pending_requests(client->user_id, pending, 50);
+            
+            // Get sent requests (outgoing)
+            FriendInfo sent[50];
+            int sent_count = friend_get_sent_requests(client->user_id, sent, 50);
+            
+            // Append pending to the friends array if there's space
+            if (friend_count + pending_count + sent_count <= 50) {
+                memcpy(&response.payload.friend_list.friends[friend_count], 
+                       pending, sizeof(FriendInfo) * pending_count);
+                memcpy(&response.payload.friend_list.friends[friend_count + pending_count],
+                       sent, sizeof(FriendInfo) * sent_count);
+                response.payload.friend_list.count += pending_count + sent_count;
+            }
+            
+            // Use 'code' field: low byte = pending_count, high byte = sent_count
+            response.code = pending_count | (sent_count << 8);
+            
+            send_response(socket_fd, &response);
+            break;
+        }    
+        
+        case MSG_FRIEND_ACCEPT:
             if (!client->is_authenticated) break;
             {
-                response.type = MSG_FRIEND_LIST_RESPONSE;
-                response.payload.friend_list.count = 
-                    friend_get_list(client->user_id, response.payload.friend_list.friends, 50);
+                int result = friend_accept_request(client->user_id, pkt->target_user_id);
+                response.type = MSG_NOTIFICATION;
+                response.code = result;
+                if (result == 0) {
+                    strcpy(response.message, "Friend request accepted");
+                } else {
+                    strcpy(response.message, "Failed to accept request");
+                }
                 send_response(socket_fd, &response);
+                
+                // Refresh friend list
+                if (result == 0) {
+                    response.type = MSG_FRIEND_LIST_RESPONSE;
+                    int friend_count = friend_get_list(client->user_id, 
+                                                      response.payload.friend_list.friends, 50);
+                    response.payload.friend_list.count = friend_count;
+                    
+                    FriendInfo pending[50];
+                    int pending_count = friend_get_pending_requests(client->user_id, pending, 50);
+                    
+                    if (friend_count + pending_count <= 50) {
+                        memcpy(&response.payload.friend_list.friends[friend_count], 
+                               pending, sizeof(FriendInfo) * pending_count);
+                        response.payload.friend_list.count += pending_count;
+                    }
+                    
+                    response.code = pending_count;
+                    send_response(socket_fd, &response);
+                }
             }
             break;
             
+        case MSG_FRIEND_DECLINE:
+            if (!client->is_authenticated) break;
+            {
+                int result = friend_decline_request(client->user_id, pkt->target_user_id);
+                response.type = MSG_NOTIFICATION;
+                response.code = result;
+                if (result == 0) {
+                    strcpy(response.message, "Friend request declined");
+                } else {
+                    strcpy(response.message, "Failed to decline request");
+                }
+                send_response(socket_fd, &response);
+                
+                // Refresh friend list
+                if (result == 0) {
+                    response.type = MSG_FRIEND_LIST_RESPONSE;
+                    int friend_count = friend_get_list(client->user_id, 
+                                                      response.payload.friend_list.friends, 50);
+                    response.payload.friend_list.count = friend_count;
+                    
+                    FriendInfo pending[50];
+                    int pending_count = friend_get_pending_requests(client->user_id, pending, 50);
+                    
+                    if (friend_count + pending_count <= 50) {
+                        memcpy(&response.payload.friend_list.friends[friend_count], 
+                               pending, sizeof(FriendInfo) * pending_count);
+                        response.payload.friend_list.count += pending_count;
+                    }
+                    
+                    response.code = pending_count;
+                    send_response(socket_fd, &response);
+                }
+            }
+            break;
+        
+        case MSG_FRIEND_REMOVE:
+            if (!client->is_authenticated) break;
+            {
+                int result = friend_remove(client->user_id, pkt->target_user_id);
+                response.type = MSG_NOTIFICATION;
+                response.code = result;
+                if (result == 0) {
+                    strcpy(response.message, "Friend removed");
+                } else {
+                    strcpy(response.message, "Failed to remove friend");
+                }
+                send_response(socket_fd, &response);
+                
+                // Refresh friend list
+                if (result == 0) {
+                    response.type = MSG_FRIEND_LIST_RESPONSE;
+                    int friend_count = friend_get_list(client->user_id, 
+                                                      response.payload.friend_list.friends, 50);
+                    response.payload.friend_list.count = friend_count;
+                    
+                    FriendInfo pending[50];
+                    int pending_count = friend_get_pending_requests(client->user_id, pending, 50);
+                    
+                    if (friend_count + pending_count <= 50) {
+                        memcpy(&response.payload.friend_list.friends[friend_count], 
+                               pending, sizeof(FriendInfo) * pending_count);
+                        response.payload.friend_list.count += pending_count;
+                    }
+                    
+                    response.code = pending_count;
+                    send_response(socket_fd, &response);
+                }
+            }
+            break;
+        
         case MSG_GET_PROFILE:
             if (!client->is_authenticated) break;
             {

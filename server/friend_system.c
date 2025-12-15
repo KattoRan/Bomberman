@@ -8,6 +8,9 @@
 
 extern sqlite3 *db;  // Defined in database.c
 
+// Forward declaration - defined in main.c
+int is_user_online(int user_id);
+
 // Send friend request from user_id to target user (by display name)
 int friend_send_request(int sender_id, const char *target_display_name) {
     // Find target user by display name
@@ -190,9 +193,8 @@ int friend_get_list(int user_id, FriendInfo *out_friends, int max_count) {
                 MAX_DISPLAY_NAME - 1);
         out_friends[count].elo_rating = sqlite3_column_int(stmt, 2);
         
-        // TODO: Get online status from active connections
-        // For now, default to offline
-        out_friends[count].is_online = 0;
+        // Check online status
+        out_friends[count].is_online = is_user_online(out_friends[count].user_id);
         
         count++;
     }
@@ -231,5 +233,37 @@ int friend_get_pending_requests(int user_id, FriendInfo *out_requests, int max_c
     
     sqlite3_finalize(stmt);
     printf("[FRIEND] Retrieved %d pending requests for user %d\n", count, user_id);
+    return count;
+}
+
+// Get sent friend requests (outgoing)
+int friend_get_sent_requests(int user_id, FriendInfo *out_requests, int max_count) {
+    sqlite3_stmt *stmt;
+    const char *sql = 
+        "SELECT u.id, u.display_name, u.elo_rating "
+        "FROM Friendships f "
+        "JOIN Users u ON f.user_id_2 = u.id "
+        "WHERE f.user_id_1 = ? AND f.status = 'PENDING' "
+        "ORDER BY f.requested_at DESC";
+    
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        return 0;
+    }
+    
+    sqlite3_bind_int(stmt, 1, user_id);
+    
+    int count = 0;
+    while (sqlite3_step(stmt) == SQLITE_ROW && count < max_count) {
+        out_requests[count].user_id = sqlite3_column_int(stmt, 0);
+        strncpy(out_requests[count].display_name, 
+                (const char *)sqlite3_column_text(stmt, 1), 
+                MAX_DISPLAY_NAME - 1);
+        out_requests[count].elo_rating = sqlite3_column_int(stmt, 2);
+        out_requests[count].is_online = 0;  // Not relevant for sent requests
+        count++;
+    }
+    
+    sqlite3_finalize(stmt);
+    printf("[FRIEND] Retrieved %d sent requests for user %d\n", count, user_id);
     return count;
 }

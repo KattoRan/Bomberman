@@ -54,6 +54,7 @@ int friend_decline_request(int user_id, int requester_id);
 int friend_remove(int user_id, int friend_id);
 int friend_get_list(int user_id, FriendInfo *out_friends, int max_count);
 int friend_get_pending_requests(int user_id, FriendInfo *out_requests, int max_count);
+int friend_get_sent_requests(int user_id, FriendInfo *out_requests, int max_count);
 
 // --- ELO System Functions ---
 int get_k_factor(int matches_played);
