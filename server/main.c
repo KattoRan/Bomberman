@@ -156,25 +156,39 @@ void handle_client_packet(int socket_fd, ClientPacket *pkt) {
 
         case MSG_CREATE_LOBBY:
             if (!client->is_authenticated) break;
-            int lid = create_lobby(pkt->room_name, client->username);
+            int lid = create_lobby(pkt->room_name, client->username, pkt->is_private, pkt->access_code);
             if (lid >= 0) {
                 client->lobby_id = lid;
                 response.type = MSG_LOBBY_UPDATE;
                 response.payload.lobby = *find_lobby(lid);
                 send_response(socket_fd, &response);
+                
+                if (pkt->is_private) {
+                    printf("[LOBBY] Private room created with code: %s\n", pkt->access_code);
+                }
             }
             break;
 
         case MSG_JOIN_LOBBY:
             if (!client->is_authenticated) break;
-            int join_res = join_lobby(pkt->lobby_id, client->username);
+            // Use join_lobby_with_code to support private rooms
+            int join_res = join_lobby_with_code(pkt->lobby_id, client->username, pkt->access_code);
             if (join_res == 0) {
                 client->lobby_id = pkt->lobby_id;
                 broadcast_lobby_update(pkt->lobby_id);
             } else {
                 response.type = MSG_ERROR;
                 response.code = join_res;
-                strcpy(response.message, "Cannot join lobby");
+                // Better error messages
+                if (join_res == ERR_LOBBY_WRONG_ACCESS_CODE) {
+                    strcpy(response.message, "Wrong access code");
+                } else if (join_res == ERR_LOBBY_LOCKED) {
+                    strcpy(response.message, "Room is locked");
+                } else if (join_res == ERR_LOBBY_GAME_IN_PROGRESS) {
+                    strcpy(response.message, "Game in progress");
+                } else {
+                    strcpy(response.message, "Cannot join lobby");
+                }
                 send_response(socket_fd, &response);
             }
             break;

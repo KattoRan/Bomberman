@@ -25,6 +25,10 @@ typedef struct {
 // Biến toàn cục cho thông báo lỗi trong lobby room
 extern char lobby_error_message[256];
 
+// Helper drawing functions
+void draw_button(SDL_Renderer *renderer, TTF_Font *font, Button *btn);
+void draw_input_field(SDL_Renderer *renderer, TTF_Font *font, InputField *field);
+
 // Khai báo các hàm UI (Prototype)
 void render_login_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Font *font_small, 
                         InputField *username, InputField *email, InputField *password,
@@ -53,5 +57,9 @@ void render_profile_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Fon
 void render_leaderboard_screen(SDL_Renderer *renderer, TTF_Font *font,
                                LeaderboardEntry *entries, int entry_count,
                                Button *back_btn);
+
+void render_create_room_dialog(SDL_Renderer *renderer, TTF_Font *font,
+                               InputField *room_name, InputField *access_code,
+                               Button *create_btn, Button *cancel_btn);
 
 #endif

@@ -358,8 +358,15 @@ void render_lobby_list_screen(SDL_Renderer *renderer, TTF_Font *font,
         SDL_RenderDrawRect(renderer, &lobby_rect);
         
         if (font) {
-            // Tên lobby
-            SDL_Surface *name_surf = TTF_RenderText_Blended(font, lobbies[i].name, CLR_WHITE);
+            // Tên lobby với lock icon nếu private
+            char display_name[80];
+            if (lobbies[i].is_private) {
+                snprintf(display_name, sizeof(display_name), "[PRIVATE] %s (ID:%d)", lobbies[i].name, lobbies[i].id);
+            } else {
+                snprintf(display_name, sizeof(display_name), "%s (ID:%d)", lobbies[i].name, lobbies[i].id);
+            }
+            
+            SDL_Surface *name_surf = TTF_RenderText_Blended(font, display_name, CLR_WHITE);
             if (name_surf) {
                 SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, name_surf);
                 SDL_Rect rect = {start_x + 20, y + 12, name_surf->w, name_surf->h};
@@ -370,9 +377,14 @@ void render_lobby_list_screen(SDL_Renderer *renderer, TTF_Font *font,
             
             // Thông tin players và status
             char info[128];
-            snprintf(info, sizeof(info), "Players: %d/4 | %s",
-                    lobbies[i].num_players,
-                    lobbies[i].status == LOBBY_WAITING ? "Waiting" : "Playing");
+            const char *status_text = lobbies[i].status == LOBBY_WAITING ? "Waiting" : "Playing";
+            if (lobbies[i].is_private) {
+                snprintf(info, sizeof(info), "Players: %d/4 | %s | PRIVATE",
+                        lobbies[i].num_players, status_text);
+            } else {
+                snprintf(info, sizeof(info), "Players: %d/4 | %s",
+                        lobbies[i].num_players, status_text);
+            }
             
             SDL_Color info_color = lobbies[i].status == LOBBY_WAITING ? CLR_SUCCESS : CLR_WARNING;
             SDL_Surface *info_surf = TTF_RenderText_Blended(font, info, info_color);
@@ -648,4 +660,74 @@ void render_lobby_room_screen(SDL_Renderer *renderer, TTF_Font *font,
     }
     
     SDL_RenderPresent(renderer);
+}/* Room creation dialog rendering - add to ui_screens.c */
+
+void render_create_room_dialog(SDL_Renderer *renderer, TTF_Font *font,
+                                InputField *room_name, InputField *access_code,
+                                Button *create_btn, Button *cancel_btn) {
+    int win_w, win_h;
+    SDL_GetRendererOutputSize(renderer, &win_w, &win_h);
+    
+    // Darken background
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 180);
+    SDL_Rect full_screen = {0, 0, win_w, win_h};
+    SDL_RenderFillRect(renderer, &full_screen);
+    
+    // Dialog box
+    int dialog_w = 500;
+    int dialog_h = 400;
+    int dialog_x = (win_w - dialog_w) / 2;
+    int dialog_y = (win_h - dialog_h) / 2;
+    
+    SDL_Rect dialog = {dialog_x, dialog_y, dialog_w, dialog_h};
+    SDL_SetRenderDrawColor(renderer, 30, 41, 59, 255);
+    SDL_RenderFillRect(renderer, &dialog);
+    
+    SDL_SetRenderDrawColor(renderer, 59, 130, 246, 255);
+    SDL_RenderDrawRect(renderer, &dialog);
+    
+    // Title
+    SDL_Color white = {255, 255, 255, 255};
+    SDL_Surface *title = TTF_RenderText_Blended(font, "Create Room", white);
+    if (title) {
+        SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, title);
+        SDL_Rect rect = {dialog_x + (dialog_w - title->w)/2, dialog_y + 20, title->w, title->h};
+        SDL_RenderCopy(renderer, tex, NULL, &rect);
+        SDL_DestroyTexture(tex);
+        SDL_FreeSurface(title);
+    }
+    
+    // Position input fields
+    room_name->rect.x = dialog_x + 50;
+    room_name->rect.y = dialog_y + 80;
+    room_name->rect.w = dialog_w - 100;
+    room_name->rect.h = 40;
+    
+    // Only show access code field if provided (for create room)
+    if (access_code) {
+        access_code->rect.x = dialog_x + 50;
+        access_code->rect.y = dialog_y + 160;
+        access_code->rect.w = dialog_w - 100;
+        access_code->rect.h = 40;
+        
+        // Helper text
+        const char *helper = "Leave access code empty for public room";
+        SDL_Color gray = {148, 163, 184, 255};
+        SDL_Surface *helper_surf = TTF_RenderText_Blended(font, helper, gray);
+        if (helper_surf) {
+            SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, helper_surf);
+            SDL_Rect rect = {dialog_x + 50, dialog_y + 210, helper_surf->w, helper_surf->h};
+            SDL_RenderCopy(renderer, tex, NULL, &rect);
+            SDL_DestroyTexture(tex);
+            SDL_FreeSurface(helper_surf);
+        }
+    }
+    
+    // Buttons
+    create_btn->rect = (SDL_Rect){dialog_x + 50, dialog_y + dialog_h - 80, 180, 50};
+    cancel_btn->rect = (SDL_Rect){dialog_x + dialog_w - 230, dialog_y + dialog_h - 80, 180, 50};
+    
+    strcpy(create_btn->text, "Create");
+    strcpy(cancel_btn->text, "Cancel");
 }

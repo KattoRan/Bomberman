@@ -48,7 +48,7 @@ FriendInfo friends_list[50];
 int friends_count = 0;
 FriendInfo pending_requests[50];
 int pending_count = 0;
-ProfileData my_profile;
+ProfileData my_profile = {0};  // Initialize to zero
 LeaderboardEntry leaderboard[100];
 int leaderboard_count = 0;
 
@@ -67,7 +67,25 @@ Button btn_leaderboard = {{730, 10, 60, 35}, "Top", 0};
 
 Button btn_ready = {{50, 500, 200, 50}, "Ready", 0};
 Button btn_start = {{270, 500, 200, 50}, "Start Game", 0};
-Button btn_leave = {{600, 500, 150, 50}, "Leave", 0};
+Button btn_leave = {{490, 500, 200, 50}, "Leave", 0};
+
+// Room creation UI
+InputField inp_room_name = {{300, 200, 400, 40}, "", "Room Name:", 0, 63};
+InputField inp_access_code = {{300, 280, 400, 40}, "", "Access Code (6 digits, optional):", 0, 6};
+int show_create_room_dialog = 0;
+int creating_private_room = 0;
+Button btn_create_confirm = {{0, 0, 180, 50}, "Create", 0};
+Button btn_cancel = {{0, 0, 180, 50}, "Cancel", 0};
+
+// Notification system
+char notification_message[256] = "";
+Uint32 notification_time = 0;
+const int NOTIFICATION_DURATION = 3000; // 3 seconds
+
+// Access code prompt for joining private rooms
+InputField inp_join_code = {{300, 250, 400, 40}, "", "Enter 6-digit access code:", 0, 6};
+int show_join_code_dialog = 0;
+int selected_private_lobby_id = -1;
 
 // --- Helper Functions ---
 
@@ -170,13 +188,14 @@ void process_server_packet(ServerPacket *pkt) {
     switch (pkt->type) {
         case MSG_AUTH_RESPONSE:
             if (pkt->code == AUTH_SUCCESS) {
-                // Both login and registration success lead to lobby list
                 current_screen = SCREEN_LOBBY_LIST;
                 send_packet(MSG_LIST_LOBBIES, 0); 
-                
-                // Store username from the input field
                 strncpy(my_username, inp_user.text, MAX_USERNAME);
                 status_message[0] = '\0';
+                
+                // Show welcome notification
+                snprintf(notification_message, sizeof(notification_message), "Welcome, %s!", my_username);
+                notification_time = SDL_GetTicks();
                 
                 printf("[CLIENT] Authenticated as: %s\n", my_username);
             } else {
@@ -191,6 +210,16 @@ void process_server_packet(ServerPacket *pkt) {
 
         case MSG_LOBBY_UPDATE:
             current_lobby = pkt->payload.lobby;
+            
+            // Show access code notification if we just created a private room
+            static int last_lobby_id = -1;
+            if (current_lobby.is_private && current_lobby.id != last_lobby_id && 
+                strcmp(current_lobby.host_username, my_username) == 0) {
+                snprintf(notification_message, sizeof(notification_message), 
+                        "Private room created! Code: %s", current_lobby.access_code);
+                notification_time = SDL_GetTicks();
+            }
+            last_lobby_id = current_lobby.id;
             
             my_player_id = -1;
             for (int i = 0; i < current_lobby.num_players; i++) {
@@ -473,11 +502,12 @@ int main(int argc, char *argv[]) {
                 case SCREEN_LOBBY_LIST:
                     if (e.type == SDL_MOUSEBUTTONDOWN) {
                         if (is_mouse_inside(btn_create.rect, mx, my)) {
-                            ClientPacket pkt;
-                            memset(&pkt, 0, sizeof(pkt));
-                            pkt.type = MSG_CREATE_LOBBY;
-                            snprintf(pkt.room_name, sizeof(pkt.room_name), "Room %d", lobby_count + 1);
-                            send(sock, &pkt, sizeof(pkt), 0);
+                            // Show create room dialog
+                            show_create_room_dialog = 1;
+                            snprintf(inp_room_name.text, sizeof(inp_room_name.text), "Room %d", lobby_count + 1);
+                            inp_access_code.text[0] = '\0';
+                            inp_room_name.is_active = 1;
+                            inp_access_code.is_active = 0;
                         }
                         if (is_mouse_inside(btn_refresh.rect, mx, my)) {
                             send_packet(MSG_LIST_LOBBIES, 0);
@@ -507,16 +537,99 @@ int main(int argc, char *argv[]) {
                         for (int i = 0; i < lobby_count; i++) {
                             SDL_Rect r = {start_x, y, list_width, 70};
                             if (is_mouse_inside(r, mx, my)) {
-                                ClientPacket pkt;
-                                memset(&pkt, 0, sizeof(pkt));
-                                pkt.type = MSG_JOIN_LOBBY;
-                                pkt.lobby_id = lobby_list[i].id;
-                                send(sock, &pkt, sizeof(pkt), 0);
+                                // Check if private room
+                                if (lobby_list[i].is_private) {
+                                    // Show access code prompt
+                                    selected_private_lobby_id = lobby_list[i].id;
+                                    show_join_code_dialog = 1;
+                                    inp_join_code.text[0] = '\0';
+                                   inp_join_code.is_active = 1;
+                                } else {
+                                    // Join public room directly
+                                    ClientPacket pkt;
+                                    memset(&pkt, 0, sizeof(pkt));
+                                    pkt.type = MSG_JOIN_LOBBY;
+                                    pkt.lobby_id = lobby_list[i].id;
+                                    pkt.access_code[0] = '\0';
+                                    send(sock, &pkt, sizeof(pkt), 0);
+                                }
                                 selected_lobby_idx = i;
                                 break;
                             }
                             y += 85;
                         }
+                    }
+                    
+                    // Dialog event handling
+                    if (show_create_room_dialog) {
+                        if (e.type == SDL_MOUSEBUTTONDOWN) {
+                            inp_room_name.is_active = is_mouse_inside(inp_room_name.rect, mx, my);
+                            inp_access_code.is_active = is_mouse_inside(inp_access_code.rect, mx, my);
+                            
+                            if (is_mouse_inside(btn_create_confirm.rect, mx, my)) {
+                                ClientPacket pkt;
+                                memset(&pkt, 0, sizeof(pkt));
+                                pkt.type = MSG_CREATE_LOBBY;
+                                strncpy(pkt.room_name, inp_room_name.text, MAX_ROOM_NAME - 1);
+                                pkt.is_private = (strlen(inp_access_code.text) == 6) ? 1 : 0;
+                                if (pkt.is_private) {
+                                    strncpy(pkt.access_code, inp_access_code.text, 7);
+                                }
+                                send(sock, &pkt, sizeof(pkt), 0);
+                                show_create_room_dialog = 0;
+                            }
+                            if (is_mouse_inside(btn_cancel.rect, mx, my)) {
+                                show_create_room_dialog = 0;
+                            }
+                        }
+                        
+                        if (e.type == SDL_TEXTINPUT) {
+                            if (inp_room_name.is_active) handle_text_input(&inp_room_name, e.text.text[0]);
+                            if (inp_access_code.is_active && e.text.text[0] >= '0' && e.text.text[0] <= '9') {
+                                handle_text_input(&inp_access_code, e.text.text[0]);
+                            }
+                        }
+                        
+                        if (e.type == SDL_KEYDOWN) {
+                            if (e.key.keysym.sym == SDLK_BACKSPACE) {
+                                if (inp_room_name.is_active) handle_text_input(&inp_room_name, '\b');
+                                if (inp_access_code.is_active) handle_text_input(&inp_access_code, '\b');
+                            }
+                            if (e.key.keysym.sym == SDLK_ESCAPE) show_create_room_dialog = 0;
+                        }
+                    }
+                    
+                    // Join code dialog handling
+                    if (show_join_code_dialog && e.type == SDL_MOUSEBUTTONDOWN) {
+                        inp_join_code.is_active = is_mouse_inside(inp_join_code.rect, mx, my);
+                        
+                        if (is_mouse_inside(btn_create_confirm.rect, mx, my)) {
+                            if (strlen(inp_join_code.text) == 6) {
+                                ClientPacket pkt;
+                                memset(&pkt, 0, sizeof(pkt));
+                                pkt.type = MSG_JOIN_LOBBY;
+                                pkt.lobby_id = selected_private_lobby_id;
+                                strncpy(pkt.access_code, inp_join_code.text, 7);
+                                send(sock, &pkt, sizeof(pkt), 0);
+                                show_join_code_dialog = 0;
+                            }
+                        }
+                        if (is_mouse_inside(btn_cancel.rect, mx, my)) {
+                            show_join_code_dialog = 0;
+                        }
+                    }
+                    
+                    if (show_join_code_dialog && e.type == SDL_TEXTINPUT && inp_join_code.is_active) {
+                        if (e.text.text[0] >= '0' && e.text.text[0] <= '9') {
+                            handle_text_input(&inp_join_code, e.text.text[0]);
+                        }
+                    }
+                    
+                    if (show_join_code_dialog && e.type == SDL_KEYDOWN) {
+                        if (e.key.keysym.sym == SDLK_BACKSPACE && inp_join_code.is_active) {
+                            handle_text_input(&inp_join_code, '\b');
+                        }
+                        if (e.key.keysym.sym == SDLK_ESCAPE) show_join_code_dialog = 0;
                     }
                     break;
                     
@@ -580,8 +693,13 @@ int main(int argc, char *argv[]) {
                 case SCREEN_PROFILE:
                 case SCREEN_LEADERBOARD:
                     if (e.type == SDL_MOUSEBUTTONDOWN) {
-                        Button back_btn;
-                        if (is_mouse_inside(back_btn.rect, mx, my)) {
+                        // Need to check against the actual button rect from rendering
+                        // For now, use a fixed rect at bottom center
+                        int win_w, win_h;
+                        SDL_GetRendererOutputSize(rend, &win_w, &win_h);
+                        SDL_Rect back_rect = {win_w/2 - 75, win_h - 100, 150, 50};
+                        
+                        if (is_mouse_inside(back_rect, mx, my)) {
                             current_screen = SCREEN_LOBBY_LIST;
                             send_packet(MSG_LIST_LOBBIES, 0);
                         }
@@ -641,11 +759,14 @@ int main(int argc, char *argv[]) {
             }
 
             case SCREEN_LOBBY_LIST: {
+                // Update hover states ONCE before rendering
                 btn_create.is_hovered = is_mouse_inside(btn_create.rect, mx, my);
                 btn_refresh.is_hovered = is_mouse_inside(btn_refresh.rect, mx, my);
                 btn_friends.is_hovered = is_mouse_inside(btn_friends.rect, mx, my);
                 btn_profile.is_hovered = is_mouse_inside(btn_profile.rect, mx, my);
                 btn_leaderboard.is_hovered = is_mouse_inside(btn_leaderboard.rect, mx, my);
+                btn_create_confirm.is_hovered = is_mouse_inside(btn_create_confirm.rect, mx, my);
+                btn_cancel.is_hovered = is_mouse_inside(btn_cancel.rect, mx, my);
 
                 render_lobby_list_screen(
                     rend, font_small,
@@ -694,6 +815,31 @@ int main(int argc, char *argv[]) {
                 }
                 
                 SDL_RenderPresent(rend);
+                
+                // Render dialog overlay if showing
+                if (show_create_room_dialog) {
+                    render_create_room_dialog(rend, font_small, &inp_room_name, &inp_access_code,
+                                             &btn_create_confirm, &btn_cancel);
+                    // Draw input fields
+                    draw_input_field(rend, font_small, &inp_room_name);
+                    draw_input_field(rend, font_small, &inp_access_code);
+                    // Draw buttons
+                    draw_button(rend, font_small, &btn_create_confirm);
+                    draw_button(rend, font_small, &btn_cancel);
+                    SDL_RenderPresent(rend);
+                }
+                
+                // Render join code dialog if showing
+                if (show_join_code_dialog) {
+                    render_create_room_dialog(rend, font_small, &inp_join_code, NULL,
+                                             &btn_create_confirm, &btn_cancel);
+                    // Change button text
+                    strcpy(btn_create_confirm.text, "Join");
+                    draw_input_field(rend, font_small, &inp_join_code);
+                    draw_button(rend, font_small, &btn_create_confirm);
+                    draw_button(rend, font_small, &btn_cancel);
+                    SDL_RenderPresent(rend);
+                }
                 break;
             }
 
@@ -749,8 +895,45 @@ int main(int argc, char *argv[]) {
             default:
                 break;
         }
+        
+        // Render notifications at top center
+        if (notification_message[0] != '\0' && SDL_GetTicks() - notification_time < NOTIFICATION_DURATION) {
+            int win_w, win_h;
+            SDL_GetRendererOutputSize(rend, &win_w, &win_h);
+            
+            SDL_Surface *notif = TTF_RenderText_Blended(font_small, notification_message, (SDL_Color){255, 255, 255, 255});
+            if (notif) {
+                int box_w = notif->w + 40;
+                int box_h = notif->h + 20;
+                int box_x = (win_w - box_w) / 2;
+                int box_y = 20;
+                
+                // Shadow
+                SDL_Rect shadow = {box_x + 2, box_y + 2, box_w, box_h};
+                SDL_SetRenderDrawColor(rend, 0, 0, 0, 100);
+                SDL_RenderFillRect(rend, &shadow);
+                
+                // Background
+                SDL_Rect bg = {box_x, box_y, box_w, box_h};
+                SDL_SetRenderDrawColor(rend, 59, 130, 246, 230);
+                SDL_RenderFillRect(rend, &bg);
+                
+                // Border
+                SDL_SetRenderDrawColor(rend, 96, 165, 250, 255);
+                SDL_RenderDrawRect(rend, &bg);
+                
+                // Text
+                SDL_Texture *tex = SDL_CreateTextureFromSurface(rend, notif);
+                SDL_Rect text_rect = {box_x + 20, box_y + 10, notif->w, notif->h};
+                SDL_RenderCopy(rend, tex, NULL, &text_rect);
+                SDL_DestroyTexture(tex);
+                SDL_FreeSurface(notif);
+            }
+        } else if (SDL_GetTicks() - notification_time >= NOTIFICATION_DURATION) {
+            notification_message[0] = '\0'; // Clear after duration
+        }
 
-        SDL_Delay(16); // ~60 FPS
+        SDL_RenderPresent(rend); // ~60 FPS
     }
 
     close(sock);

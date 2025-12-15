@@ -24,7 +24,8 @@ Lobby* find_lobby(int lobby_id) {
     return NULL;
 }
 
-int create_lobby(const char *room_name, const char *host_username) {
+// Create a new lobby
+int create_lobby(const char *room_name, const char *host_username, int is_private, const char *access_code) {
     int slot = -1;
     for (int i = 0; i < MAX_LOBBIES; i++) {
         if (lobbies[i].id == -1) {
@@ -45,6 +46,20 @@ int create_lobby(const char *room_name, const char *host_username) {
     lobby->num_players = 1;
     lobby->host_id = 0;
     lobby->status = LOBBY_WAITING;
+    lobby->is_private = is_private;
+    lobby->is_locked = 0;
+    
+    // Set access code for private rooms
+    if (is_private && access_code) {
+        strncpy(lobby->access_code, access_code, 7);
+        lobby->access_code[7] = '\0';
+    } else {
+        lobby->access_code[0] = '\0';
+    }
+    
+    // Store host username for display
+    strncpy(lobby->host_username, host_username, MAX_USERNAME - 1);
+    lobby->host_username[MAX_USERNAME - 1] = '\0';
     
     Player *host = &lobby->players[0];
     host->id = 0;
@@ -58,12 +73,22 @@ int create_lobby(const char *room_name, const char *host_username) {
     return lobby->id;
 }
 
-int join_lobby(int lobby_id, const char *username) {
+// Join an existing lobby with optional access code
+int join_lobby_with_code(int lobby_id, const char *username, const char *access_code) {
     Lobby *lobby = find_lobby(lobby_id);
     
     if (!lobby) return ERR_LOBBY_NOT_FOUND;
     if (lobby->num_players >= MAX_CLIENTS) return ERR_LOBBY_FULL;
-    if (lobby->status == LOBBY_PLAYING) return ERR_LOBBY_FULL;
+    if (lobby->status != LOBBY_WAITING) return ERR_LOBBY_GAME_IN_PROGRESS; // Game in progress
+    if (lobby->is_locked) return ERR_LOBBY_LOCKED; // Room is locked
+    
+    // Check access code for private rooms
+    if (lobby->is_private) {
+        if (!access_code || strcmp(lobby->access_code, access_code) != 0) {
+            printf("[LOBBY] Access denied to private room %d (wrong code)\n", lobby_id);
+            return ERR_LOBBY_WRONG_ACCESS_CODE; // Wrong access code
+        }
+    }
     
     Player *player = &lobby->players[lobby->num_players];
     player->id = lobby->num_players;
@@ -73,10 +98,14 @@ int join_lobby(int lobby_id, const char *username) {
     player->is_alive = 0;
     
     lobby->num_players++;
-    
     printf("[LOBBY] %s joined lobby %d (%d/%d)\n", 
            username, lobby_id, lobby->num_players, MAX_CLIENTS);
     return 0;
+}
+
+// Wrapper for backwards compatibility
+int join_lobby(int lobby_id, const char *username) {
+    return join_lobby_with_code(lobby_id, username, NULL);
 }
 
 int leave_lobby(int lobby_id, const char *username) {

@@ -14,13 +14,11 @@ void render_friends_screen(SDL_Renderer *renderer, TTF_Font *font,
     int win_w, win_h;
     SDL_GetRendererOutputSize(renderer, &win_w, &win_h);
     
-    // Simple background
     SDL_SetRenderDrawColor(renderer, 15, 23, 42, 255);
     SDL_RenderClear(renderer);
     
-    // Title
     SDL_Color white = {255, 255, 255, 255};
-    SDL_Surface *surf = TTF_RenderText_Blended(font, "Friends Screen - Under Development", white);
+    SDL_Surface *surf = TTF_RenderText_Blended(font, "Friends List", white);
     if (surf) {
         SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, surf);
         SDL_Rect rect = {(win_w - surf->w) / 2, 100, surf->w, surf->h};
@@ -29,9 +27,8 @@ void render_friends_screen(SDL_Renderer *renderer, TTF_Font *font,
         SDL_FreeSurface(surf);
     }
     
-    // Show count
     char msg[128];
-    snprintf(msg, sizeof(msg), "Friends: %d | Pending Requests: %d", friend_count, pending_count);
+    snprintf(msg, sizeof(msg), "You have %d friends | %d pending requests", friend_count, pending_count);
     surf = TTF_RenderText_Blended(font, msg, white);
     if (surf) {
         SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, surf);
@@ -41,7 +38,6 @@ void render_friends_screen(SDL_Renderer *renderer, TTF_Font *font,
         SDL_FreeSurface(surf);
     }
     
-    // Back button
     back_btn->rect = (SDL_Rect){win_w/2 - 75, win_h - 100, 150, 50};
     strcpy(back_btn->text, "Back");
     
@@ -61,8 +57,6 @@ void render_friends_screen(SDL_Renderer *renderer, TTF_Font *font,
         SDL_DestroyTexture(tex);
         SDL_FreeSurface(surf);
     }
-    
-    SDL_RenderPresent(renderer);
 }
 
 // Placeholder profile screen
@@ -76,7 +70,7 @@ void render_profile_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Fon
     SDL_RenderClear(renderer);
     
     SDL_Color white = {255, 255, 255, 255};
-    SDL_Surface *surf = TTF_RenderText_Blended(font_large, "Profile Screen - Under Development", white);
+    SDL_Surface *surf = TTF_RenderText_Blended(font_large, "Your Profile", white);
     if (surf) {
         SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, surf);
         SDL_Rect rect = {(win_w - surf->w) / 2, 100, surf->w, surf->h};
@@ -85,16 +79,18 @@ void render_profile_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Fon
         SDL_FreeSurface(surf);
     }
     
-    char msg[256];
-    snprintf(msg, sizeof(msg), "ELO: %d | Matches: %d | Wins: %d", 
-             profile->elo_rating, profile->total_matches, profile->wins);
-    surf = TTF_RenderText_Blended(font_small, msg, white);
-    if (surf) {
-        SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, surf);
-        SDL_Rect rect = {(win_w - surf->w) / 2, 200, surf->w, surf->h};
-        SDL_RenderCopy(renderer, tex, NULL, &rect);
-        SDL_DestroyTexture(tex);
-        SDL_FreeSurface(surf);
+    if (profile) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "ELO Rating: %d | Matches: %d | Wins: %d | Kills: %d", 
+                 profile->elo_rating, profile->total_matches, profile->wins, profile->total_kills);
+        surf = TTF_RenderText_Blended(font_small, msg, white);
+        if (surf) {
+            SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, surf);
+            SDL_Rect rect = {(win_w - surf->w) / 2, 200, surf->w, surf->h};
+            SDL_RenderCopy(renderer, tex, NULL, &rect);
+            SDL_DestroyTexture(tex);
+            SDL_FreeSurface(surf);
+        }
     }
     
     back_btn->rect = (SDL_Rect){win_w/2 - 75, win_h - 100, 150, 50};
@@ -116,8 +112,6 @@ void render_profile_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Fon
         SDL_DestroyTexture(tex);
         SDL_FreeSurface(surf);
     }
-    
-    SDL_RenderPresent(renderer);
 }
 
 // Placeholder leaderboard screen
@@ -170,6 +164,4 @@ void render_leaderboard_screen(SDL_Renderer *renderer, TTF_Font *font,
         SDL_DestroyTexture(tex);
         SDL_FreeSurface(surf);
     }
-    
-    SDL_RenderPresent(renderer);
 }

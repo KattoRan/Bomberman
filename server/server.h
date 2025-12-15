@@ -31,8 +31,9 @@ int db_update_elo(int user_id, int new_elo);
 
 // --- Lobby Functions ---
 void init_lobbies();
-int create_lobby(const char *room_name, const char *host_username);
+int create_lobby(const char *room_name, const char *host_username, int is_private, const char *access_code);
 int join_lobby(int lobby_id, const char *username);
+int join_lobby_with_code(int lobby_id, const char *username, const char *access_code);
 int leave_lobby(int lobby_id, const char *username);
 int toggle_ready(int lobby_id, const char *username);
 int start_game(int lobby_id, const char *username);

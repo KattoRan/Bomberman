@@ -74,13 +74,17 @@
 
 // Response codes
 #define AUTH_SUCCESS 0
-#define AUTH_FAILED 1
+#define AUTH_FAIL 1
+#define AUTH_FAILED 1           // Alias for backward compatibility
 #define AUTH_USER_EXISTS 2
 #define AUTH_INVALID 3
 
 // Error codes
-#define ERR_LOBBY_FULL 1
-#define ERR_LOBBY_NOT_FOUND 2
+#define ERR_LOBBY_NOT_FOUND -1
+#define ERR_LOBBY_FULL -2
+#define ERR_LOBBY_GAME_IN_PROGRESS -3
+#define ERR_LOBBY_LOCKED -4
+#define ERR_LOBBY_WRONG_ACCESS_CODE -5
 #define ERR_NOT_HOST 3
 #define ERR_NOT_ENOUGH_PLAYERS 4
 #define ERR_ALREADY_IN_LOBBY 5
@@ -130,11 +134,15 @@ typedef struct {
 // Lobby structure
 typedef struct {
     int id;
-    char name[MAX_ROOM_NAME];
+    char name[64];
+    char host_username[MAX_USERNAME];
     int host_id;
     Player players[MAX_CLIENTS];
     int num_players;
-    int status;
+    int status;                  // LOBBY_WAITING or LOBBY_PLAYING
+    int is_private;              // 0 = public, 1 = private
+    char access_code[8];         // 6-digit code (plus null terminator)
+    int is_locked;               // 0 = unlocked, 1 = locked (no new joins)
 } Lobby;
 
 // Game state
@@ -151,14 +159,15 @@ typedef struct {
 typedef struct {
     int type;
     char username[MAX_USERNAME];
-    char email[MAX_EMAIL];             // For registration
     char password[MAX_PASSWORD];
+    char email[MAX_EMAIL];             // For registration
     char room_name[MAX_ROOM_NAME];
-    char access_code[16];              // For private rooms
-    char target_display_name[MAX_DISPLAY_NAME]; // For friend requests
     int lobby_id;
-    int data;                          // General purpose int
-    int target_player_id;              // For kick, friend response
+    int data;                          // Multi-purpose: direction, player_id, etc.
+    char access_code[8];               // For joining private rooms
+    int is_private;                    // For creating private rooms
+    char target_display_name[MAX_DISPLAY_NAME]; // For friend requests
+    int target_player_id;              // For kick, spectator view
 } ClientPacket;
 
 // Server packet - ENHANCED
