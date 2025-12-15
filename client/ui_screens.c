@@ -185,7 +185,7 @@ void draw_background_grid(SDL_Renderer *renderer, int w, int h) {
 
 // 1. Màn hình Đăng nhập - CÂN ĐỐI HOÀN TOÀN
 void render_login_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Font *font_small, 
-                        InputField *username, InputField *password,
+                        InputField *username, InputField *email, InputField *password,
                         Button *login_btn, Button *register_btn, 
                         const char *message) {
     
@@ -236,18 +236,31 @@ void render_login_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Font 
     }
 
     // Cập nhật vị trí các input fields để căn giữa
+    // If email is NULL, we're in login mode (2 fields), otherwise registration (3 fields)
+    int is_registration = (email != NULL);
+    
     username->rect.x = start_x;
-    username->rect.y = 180;
+    username->rect.y = is_registration ? 150 : 200;
     username->rect.w = content_width;
     username->rect.h = 45;
 
+    if (is_registration) {
+        email->rect.x = start_x;
+        email->rect.y = 220;
+        email->rect.w = content_width;
+        email->rect.h = 45;
+    }
+
     password->rect.x = start_x;
-    password->rect.y = 260;
+    password->rect.y = is_registration ? 290 : 280;
     password->rect.w = content_width;
     password->rect.h = 45;
 
     // Vẽ input fields
     draw_input_field(renderer, font_small, username);
+    if (is_registration) {
+        draw_input_field(renderer, font_small, email);
+    }
     draw_input_field(renderer, font_small, password);
 
     // Cập nhật vị trí các buttons để căn giữa
@@ -255,16 +268,26 @@ void render_login_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Font 
     int button_spacing = 20;
     int total_button_width = button_width * 2 + button_spacing;
     int button_start_x = center_x - total_button_width / 2;
+    int button_y = is_registration ? 380 : 380;
 
     login_btn->rect.x = button_start_x;
-    login_btn->rect.y = 350;
+    login_btn->rect.y = button_y;
     login_btn->rect.w = button_width;
     login_btn->rect.h = 50;
 
     register_btn->rect.x = button_start_x + button_width + button_spacing;
-    register_btn->rect.y = 350;
+    register_btn->rect.y = button_y;
     register_btn->rect.w = button_width;
     register_btn->rect.h = 50;
+    
+    // Set button labels based on mode
+    if (is_registration) {
+        strcpy(login_btn->text, "Back");
+        strcpy(register_btn->text, "Register");
+    } else {
+        strcpy(login_btn->text, "Login");
+        strcpy(register_btn->text, "Register");
+    }
 
     draw_button(renderer, font_small, login_btn);
     draw_button(renderer, font_small, register_btn);
@@ -276,7 +299,7 @@ void render_login_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Font 
             SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, surf);
             SDL_Rect rect = {
                 center_x - surf->w / 2,
-                430,
+                460,
                 surf->w, 
                 surf->h
             };

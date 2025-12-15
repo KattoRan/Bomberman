@@ -19,7 +19,10 @@ typedef enum {
     SCREEN_REGISTER,
     SCREEN_LOBBY_LIST,
     SCREEN_LOBBY_ROOM,
-    SCREEN_GAME
+    SCREEN_GAME,
+    SCREEN_FRIENDS,
+    SCREEN_PROFILE,
+    SCREEN_LEADERBOARD
 } ScreenState;
 
 ScreenState current_screen = SCREEN_LOGIN;
@@ -40,14 +43,27 @@ Lobby current_lobby;
 GameState current_state;
 GameState previous_state;  // Để theo dõi thay đổi
 
+// Friends, Profile, Leaderboard Data
+FriendInfo friends_list[50];
+int friends_count = 0;
+FriendInfo pending_requests[50];
+int pending_count = 0;
+ProfileData my_profile;
+LeaderboardEntry leaderboard[100];
+int leaderboard_count = 0;
+
 // UI Components
-InputField inp_user = {{350, 200, 300, 40}, "", "Username:", 0, 30};
-InputField inp_pass = {{350, 300, 300, 40}, "", "Password:", 0, 30};
-Button btn_login = {{350, 400, 140, 50}, "Login", 0};
-Button btn_reg = {{510, 400, 140, 50}, "Register", 0};
+InputField inp_user = {{350, 150, 300, 40}, "", "Username:", 0, 30};
+InputField inp_email = {{350, 220, 300, 40}, "", "Email:", 0, 127};
+InputField inp_pass = {{350, 290, 300, 40}, "", "Password:", 0, 30};
+Button btn_login = {{350, 380, 140, 50}, "Login", 0};
+Button btn_reg = {{510, 380, 140, 50}, "Register", 0};
 
 Button btn_create = {{50, 500, 200, 50}, "Create Room", 0};
 Button btn_refresh = {{270, 500, 200, 50}, "Refresh", 0};
+Button btn_friends = {{490, 500, 150, 50}, "Friends", 0};
+Button btn_profile = {{650, 10, 70, 35}, "Profile", 0};
+Button btn_leaderboard = {{730, 10, 60, 35}, "Top", 0};
 
 Button btn_ready = {{50, 500, 200, 50}, "Ready", 0};
 Button btn_start = {{270, 500, 200, 50}, "Start Game", 0};
@@ -154,10 +170,15 @@ void process_server_packet(ServerPacket *pkt) {
     switch (pkt->type) {
         case MSG_AUTH_RESPONSE:
             if (pkt->code == AUTH_SUCCESS) {
+                // Both login and registration success lead to lobby list
                 current_screen = SCREEN_LOBBY_LIST;
                 send_packet(MSG_LIST_LOBBIES, 0); 
+                
+                // Store username from the input field
                 strncpy(my_username, inp_user.text, MAX_USERNAME);
                 status_message[0] = '\0';
+                
+                printf("[CLIENT] Authenticated as: %s\n", my_username);
             } else {
                 strncpy(status_message, pkt->message, sizeof(status_message));
             }
@@ -228,6 +249,28 @@ void process_server_packet(ServerPacket *pkt) {
         case MSG_ERROR:
             strncpy(status_message, pkt->message, sizeof(status_message));
             strncpy(lobby_error_message, pkt->message, sizeof(lobby_error_message));
+            break;
+            
+        case MSG_FRIEND_LIST_RESPONSE:
+            friends_count = pkt->payload.friend_list.count;
+            if (friends_count > 50) friends_count = 50;
+            memcpy(friends_list, pkt->payload.friend_list.friends, 
+                   sizeof(FriendInfo) * friends_count);
+            printf("[CLIENT] Received %d friends\n", friends_count);
+            break;
+            
+        case MSG_PROFILE_RESPONSE:
+            my_profile = pkt->payload.profile;
+            printf("[CLIENT] Received profile: ELO %d, Matches %d\n", 
+                   my_profile.elo_rating, my_profile.total_matches);
+            break;
+            
+        case MSG_LEADERBOARD_RESPONSE:
+            leaderboard_count = pkt->payload.leaderboard.count;
+            if (leaderboard_count > 100) leaderboard_count = 100;
+            memcpy(leaderboard, pkt->payload.leaderboard.entries,
+                   sizeof(LeaderboardEntry) * leaderboard_count);
+            printf("[CLIENT] Received %d leaderboard entries\n", leaderboard_count);
             break;
     }
 }
@@ -318,16 +361,15 @@ int main(int argc, char *argv[]) {
                         }
                         
                         if (is_mouse_inside(btn_reg.rect, mx, my)) {
-                            if (strlen(inp_user.text) > 0 && strlen(inp_pass.text) > 0) {
-                                ClientPacket pkt;
-                                memset(&pkt, 0, sizeof(pkt));
-                                pkt.type = MSG_REGISTER;
-                                strcpy(pkt.username, inp_user.text);
-                                strcpy(pkt.password, inp_pass.text);
-                                send(sock, &pkt, sizeof(pkt), 0);
-                            } else {
-                                strncpy(status_message, "Please enter username and password", sizeof(status_message));
-                            }
+                            // Switch to registration screen
+                            current_screen = SCREEN_REGISTER;
+                            inp_user.text[0] = '\0';
+                            inp_email.text[0] = '\0';
+                            inp_pass.text[0] = '\0';
+                            inp_user.is_active = 1;
+                            inp_email.is_active = 0;
+                            inp_pass.is_active = 0;
+                            status_message[0] = '\0';
                         }
                     }
                     
@@ -365,6 +407,69 @@ int main(int argc, char *argv[]) {
                     }
                     break;
                     
+                case SCREEN_REGISTER:
+                    if (e.type == SDL_MOUSEBUTTONDOWN) {
+                        inp_user.is_active = is_mouse_inside(inp_user.rect, mx, my);
+                        inp_email.is_active = is_mouse_inside(inp_email.rect, mx, my);
+                        inp_pass.is_active = is_mouse_inside(inp_pass.rect, mx, my);
+                        
+                        if (is_mouse_inside(btn_reg.rect, mx, my)) {
+                            if (strlen(inp_user.text) > 0 && strlen(inp_email.text) > 0 && strlen(inp_pass.text) > 0) {
+                                ClientPacket pkt;
+                                memset(&pkt, 0, sizeof(pkt));
+                                pkt.type = MSG_REGISTER;
+                                strcpy(pkt.username, inp_user.text);
+                                strcpy(pkt.email, inp_email.text);
+                                strcpy(pkt.password, inp_pass.text);
+                                send(sock, &pkt, sizeof(pkt), 0);
+                            } else {
+                                strncpy(status_message, "Please fill all fields", sizeof(status_message));
+                            }
+                        }
+                        
+                        if (is_mouse_inside(btn_login.rect, mx, my)) {
+                            // Back to login screen
+                            current_screen = SCREEN_LOGIN;
+                            inp_user.text[0] = '\0';
+                            inp_email.text[0] = '\0';
+                            inp_pass.text[0] = '\0';
+                            inp_user.is_active = 1;
+                            inp_email.is_active = 0;
+                            inp_pass.is_active = 0;
+                            status_message[0] = '\0';
+                        }
+                    }
+                    
+                    if (e.type == SDL_TEXTINPUT) {
+                        if (inp_user.is_active) handle_text_input(&inp_user, e.text.text[0]);
+                        if (inp_email.is_active) handle_text_input(&inp_email, e.text.text[0]);
+                        if (inp_pass.is_active) handle_text_input(&inp_pass, e.text.text[0]);
+                    }
+                    
+                    if (e.type == SDL_KEYDOWN) {
+                        if (e.key.keysym.sym == SDLK_BACKSPACE) {
+                            if (inp_user.is_active) handle_text_input(&inp_user, '\b');
+                            if (inp_email.is_active) handle_text_input(&inp_email, '\b');
+                            if (inp_pass.is_active) handle_text_input(&inp_pass, '\b');
+                        }
+                        
+                        if (e.key.keysym.sym == SDLK_TAB) {
+                            if (inp_user.is_active) {
+                                inp_user.is_active = 0;
+                                inp_email.is_active = 1;
+                            } else if (inp_email.is_active) {
+                                inp_email.is_active = 0;
+                                inp_pass.is_active = 1;
+                            } else if (inp_pass.is_active) {
+                                inp_pass.is_active = 0;
+                                inp_user.is_active = 1;
+                            } else {
+                                inp_user.is_active = 1;
+                            }
+                        }
+                    }
+                    break;
+                    
                 case SCREEN_LOBBY_LIST:
                     if (e.type == SDL_MOUSEBUTTONDOWN) {
                         if (is_mouse_inside(btn_create.rect, mx, my)) {
@@ -376,6 +481,21 @@ int main(int argc, char *argv[]) {
                         }
                         if (is_mouse_inside(btn_refresh.rect, mx, my)) {
                             send_packet(MSG_LIST_LOBBIES, 0);
+                        }
+                        if (is_mouse_inside(btn_friends.rect, mx, my)) {
+                            // Request friends list from server
+                            send_packet(MSG_FRIEND_LIST, 0);
+                            current_screen = SCREEN_FRIENDS;
+                        }
+                        if (is_mouse_inside(btn_profile.rect, mx, my)) {
+                            // Request own profile
+                            send_packet(MSG_GET_PROFILE, 0);
+                            current_screen = SCREEN_PROFILE;
+                        }
+                        if (is_mouse_inside(btn_leaderboard.rect, mx, my)) {
+                            // Request leaderboard
+                            send_packet(MSG_GET_LEADERBOARD, 0);
+                            current_screen = SCREEN_LEADERBOARD;
                         }
                         
                         int win_w, win_h;
@@ -456,6 +576,18 @@ int main(int argc, char *argv[]) {
                     }
                     break;
                     
+                case SCREEN_FRIENDS:
+                case SCREEN_PROFILE:
+                case SCREEN_LEADERBOARD:
+                    if (e.type == SDL_MOUSEBUTTONDOWN) {
+                        Button back_btn;
+                        if (is_mouse_inside(back_btn.rect, mx, my)) {
+                            current_screen = SCREEN_LOBBY_LIST;
+                            send_packet(MSG_LIST_LOBBIES, 0);
+                        }
+                    }
+                    break;
+                    
                 default:
                     break;
             }
@@ -486,9 +618,23 @@ int main(int argc, char *argv[]) {
                 btn_login.is_hovered = is_mouse_inside(btn_login.rect, mx, my);
                 btn_reg.is_hovered = is_mouse_inside(btn_reg.rect, mx, my);
 
+                // Login screen: only show username and password
                 render_login_screen(
                     rend, font_large, font_small,
-                    &inp_user, &inp_pass,
+                    &inp_user, NULL, &inp_pass,
+                    &btn_login, &btn_reg, status_message
+                );
+                break;
+            }
+            
+            case SCREEN_REGISTER: {
+                btn_login.is_hovered = is_mouse_inside(btn_login.rect, mx, my);
+                btn_reg.is_hovered = is_mouse_inside(btn_reg.rect, mx, my);
+
+                // Register screen: show all three fields
+                render_login_screen(
+                    rend, font_large, font_small,
+                    &inp_user, &inp_email, &inp_pass,
                     &btn_login, &btn_reg, status_message
                 );
                 break;
@@ -497,6 +643,9 @@ int main(int argc, char *argv[]) {
             case SCREEN_LOBBY_LIST: {
                 btn_create.is_hovered = is_mouse_inside(btn_create.rect, mx, my);
                 btn_refresh.is_hovered = is_mouse_inside(btn_refresh.rect, mx, my);
+                btn_friends.is_hovered = is_mouse_inside(btn_friends.rect, mx, my);
+                btn_profile.is_hovered = is_mouse_inside(btn_profile.rect, mx, my);
+                btn_leaderboard.is_hovered = is_mouse_inside(btn_leaderboard.rect, mx, my);
 
                 render_lobby_list_screen(
                     rend, font_small,
@@ -504,6 +653,47 @@ int main(int argc, char *argv[]) {
                     &btn_create, &btn_refresh,
                     selected_lobby_idx
                 );
+                
+                // Draw additional nav buttons
+                // Friends button
+                SDL_Color friends_color = btn_friends.is_hovered ? (SDL_Color){96, 165, 250, 255} : (SDL_Color){59, 130, 246, 255};
+                SDL_SetRenderDrawColor(rend, friends_color.r, friends_color.g, friends_color.b, 255);
+                SDL_RenderFillRect(rend, &btn_friends.rect);
+                SDL_Surface *surf = TTF_RenderText_Blended(font_small, btn_friends.text, (SDL_Color){255, 255, 255, 255});
+                if (surf) {
+                    SDL_Texture *tex = SDL_CreateTextureFromSurface(rend, surf);
+                    SDL_Rect r = {btn_friends.rect.x + (btn_friends.rect.w - surf->w)/2, btn_friends.rect.y + (btn_friends.rect.h - surf->h)/2, surf->w, surf->h};
+                    SDL_RenderCopy(rend, tex, NULL, &r);
+                    SDL_DestroyTexture(tex);
+                    SDL_FreeSurface(surf);
+                }
+                
+                // Profile & Leaderboard buttons (top right)
+                SDL_Color prof_color = btn_profile.is_hovered ? (SDL_Color){96, 165, 250, 255} : (SDL_Color){59, 130, 246, 255};
+                SDL_SetRenderDrawColor(rend, prof_color.r, prof_color.g, prof_color.b, 255);
+                SDL_RenderFillRect(rend, &btn_profile.rect);
+                surf = TTF_RenderText_Blended(font_small, btn_profile.text, (SDL_Color){255, 255, 255, 255});
+                if (surf) {
+                    SDL_Texture *tex = SDL_CreateTextureFromSurface(rend, surf);
+                    SDL_Rect r = {btn_profile.rect.x + (btn_profile.rect.w - surf->w)/2, btn_profile.rect.y + (btn_profile.rect.h - surf->h)/2, surf->w, surf->h};
+                    SDL_RenderCopy(rend, tex, NULL, &r);
+                    SDL_DestroyTexture(tex);
+                    SDL_FreeSurface(surf);
+                }
+                
+                SDL_Color lead_color = btn_leaderboard.is_hovered ? (SDL_Color){96, 165, 250, 255} : (SDL_Color){59, 130, 246, 255};
+                SDL_SetRenderDrawColor(rend, lead_color.r, lead_color.g, lead_color.b, 255);
+                SDL_RenderFillRect(rend, &btn_leaderboard.rect);
+                surf = TTF_RenderText_Blended(font_small, btn_leaderboard.text, (SDL_Color){255, 255, 255, 255});
+                if (surf) {
+                    SDL_Texture *tex = SDL_CreateTextureFromSurface(rend, surf);
+                    SDL_Rect r = {btn_leaderboard.rect.x + (btn_leaderboard.rect.w - surf->w)/2, btn_leaderboard.rect.y + (btn_leaderboard.rect.h - surf->h)/2, surf->w, surf->h};
+                    SDL_RenderCopy(rend, tex, NULL, &r);
+                    SDL_DestroyTexture(tex);
+                    SDL_FreeSurface(surf);
+                }
+                
+                SDL_RenderPresent(rend);
                 break;
             }
 
@@ -531,6 +721,28 @@ int main(int argc, char *argv[]) {
 
             case SCREEN_GAME: {
                 render_game(rend, font_small, tick++, my_player_id);
+                break;
+            }
+            
+            case SCREEN_FRIENDS: {
+                Button back_btn;
+                back_btn.is_hovered = is_mouse_inside(back_btn.rect, mx, my);
+                render_friends_screen(rend, font_small, friends_list, friends_count,
+                                     pending_requests, pending_count, &back_btn);
+                break;
+            }
+            
+            case SCREEN_PROFILE: {
+                Button back_btn;
+                back_btn.is_hovered = is_mouse_inside(back_btn.rect, mx, my);
+                render_profile_screen(rend, font_large, font_small, &my_profile, &back_btn);
+                break;
+            }
+            
+            case SCREEN_LEADERBOARD: {
+                Button back_btn;
+                back_btn.is_hovered = is_mouse_inside(back_btn.rect, mx, my);
+                render_leaderboard_screen(rend, font_small, leaderboard, leaderboard_count, &back_btn);
                 break;
             }
 

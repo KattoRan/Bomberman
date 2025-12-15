@@ -13,7 +13,9 @@
 // --- Structures & Globals ---
 typedef struct {
     int socket_fd;
+    int user_id;                      // Database user ID
     char username[MAX_USERNAME];
+    char display_name[MAX_DISPLAY_NAME];
     int is_authenticated;
     int lobby_id;
     int player_id_in_game; 
@@ -115,22 +117,41 @@ void handle_client_packet(int socket_fd, ClientPacket *pkt) {
     switch (pkt->type) {
         case MSG_REGISTER:
             response.type = MSG_AUTH_RESPONSE;
-            response.code = register_user(pkt->username, pkt->password);
-            strcpy(response.message, (response.code == AUTH_SUCCESS) ? "Success" : "Failed");
+            response.code = db_register_user(pkt->username, pkt->email, pkt->password);
+            if (response.code == AUTH_SUCCESS) {
+                strcpy(response.message, "Registration successful");
+                printf("[AUTH] Registration: %s (email: %s)\n", pkt->username, pkt->email);
+            } else {
+                strcpy(response.message, "Registration failed");
+            }
             send_response(socket_fd, &response);
             break;
             
         case MSG_LOGIN:
-            response.type = MSG_AUTH_RESPONSE;
-            response.code = login_user(pkt->username, pkt->password);
-            if (response.code == AUTH_SUCCESS) {
-                strncpy(client->username, pkt->username, MAX_USERNAME);
-                client->is_authenticated = 1;
-                strcpy(response.message, "Login successful");
-            } else {
-                strcpy(response.message, "Invalid credentials");
+            {
+                User user;
+                response.type = MSG_AUTH_RESPONSE;
+                response.code = db_login_user(pkt->username, pkt->password, &user);
+                if (response.code == AUTH_SUCCESS) {
+                    client->user_id = user.id;
+                    strncpy(client->username, user.username, MAX_USERNAME - 1);
+                    strncpy(client->display_name, user.display_name, MAX_DISPLAY_NAME - 1);
+                    client->is_authenticated = 1;
+                    
+                    // Send back user info
+                    response.payload.auth.user_id = user.id;
+                    strncpy(response.payload.auth.username, user.username, MAX_USERNAME - 1);
+                    strncpy(response.payload.auth.display_name, user.display_name, MAX_DISPLAY_NAME - 1);
+                    response.payload.auth.elo_rating = user.elo_rating;
+                    strcpy(response.message, "Login successful");
+                    
+                    printf("[AUTH] Login: %s (ID: %d, ELO: %d)\n", 
+                           user.username, user.id, user.elo_rating);
+                } else {
+                    strcpy(response.message, "Invalid credentials");
+                }
+                send_response(socket_fd, &response);
             }
-            send_response(socket_fd, &response);
             break;
 
         case MSG_CREATE_LOBBY:
@@ -199,6 +220,57 @@ void handle_client_packet(int socket_fd, ClientPacket *pkt) {
                 }
             }
             break;
+            
+        case MSG_FRIEND_REQUEST:
+            if (!client->is_authenticated) break;
+            {
+                int result = friend_send_request(client->user_id, pkt->target_display_name);
+                response.type = MSG_NOTIFICATION;
+                response.code = result;
+                if (result == 0) {
+                    snprintf(response.message, sizeof(response.message), 
+                             "Friend request sent to %s", pkt->target_display_name);
+                } else {
+                    strcpy(response.message, "Friend request failed");
+                }
+                send_response(socket_fd, &response);
+            }
+            break;
+            
+        case MSG_FRIEND_LIST:
+            if (!client->is_authenticated) break;
+            {
+                response.type = MSG_FRIEND_LIST_RESPONSE;
+                response.payload.friend_list.count = 
+                    friend_get_list(client->user_id, response.payload.friend_list.friends, 50);
+                send_response(socket_fd, &response);
+            }
+            break;
+            
+        case MSG_GET_PROFILE:
+            if (!client->is_authenticated) break;
+            {
+                response.type = MSG_PROFILE_RESPONSE;
+                int target_id = (pkt->data > 0) ? pkt->data : client->user_id;
+                if (stats_get_profile(target_id, &response.payload.profile) == 0) {
+                    response.code = 0;
+                } else {
+                    response.code = -1;
+                    strcpy(response.message, "Profile not found");
+                }
+                send_response(socket_fd, &response);
+            }
+            break;
+            
+        case MSG_GET_LEADERBOARD:
+            if (!client->is_authenticated) break;
+            {
+                response.type = MSG_LEADERBOARD_RESPONSE;
+                response.payload.leaderboard.count = 
+                    stats_get_leaderboard(response.payload.leaderboard.entries, 100);
+                send_response(socket_fd, &response);
+            }
+            break;
     }
 }
 
@@ -206,11 +278,16 @@ void handle_client_packet(int socket_fd, ClientPacket *pkt) {
 
 int main() {
     printf("╔════════════════════════════════════╗\n");
-    printf("║  Bomberman Realtime Server v3.0   ║\n");
+    printf("║  Bomberman Server v4.0 (SQLite3)  ║\n");
     printf("║  Game tick rate: 20 Hz (50ms)     ║\n");
     printf("╚════════════════════════════════════╝\n\n");
     
-    load_users();
+    // Initialize SQLite database
+    if (db_init() != 0) {
+        fprintf(stderr, "Failed to initialize database\n");
+        return 1;
+    }
+    
     init_lobbies();
     int server_fd = init_server_socket();
     
@@ -277,9 +354,9 @@ int main() {
                          leave_lobby(clients[i].lobby_id, clients[i].username);
                          broadcast_lobby_update(clients[i].lobby_id);
                     }
-                    if (clients[i].is_authenticated) {
-                        logout_user(clients[i].username);
-                    }
+                    // No longer using logout_user() since it doesn't exist
+                    // Database tracks online status differently now
+                    
                     
                     close(sd);
                     clients[i] = clients[num_clients-1];

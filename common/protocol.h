@@ -9,6 +9,8 @@
 #define MAX_USERNAME 32
 #define MAX_PASSWORD 128
 #define MAX_ROOM_NAME 64
+#define MAX_EMAIL 128
+#define MAX_DISPLAY_NAME 64
 
 // Map config
 #define MAP_WIDTH 15
@@ -35,6 +37,14 @@
 #define MSG_START_GAME 8
 #define MSG_MOVE 10
 #define MSG_PLANT_BOMB 11
+#define MSG_FRIEND_REQUEST 12
+#define MSG_FRIEND_RESPONSE 13
+#define MSG_FRIEND_LIST 14
+#define MSG_GET_PROFILE 15
+#define MSG_UPDATE_PROFILE 16
+#define MSG_GET_LEADERBOARD 17
+#define MSG_KICK_PLAYER 18
+#define MSG_SET_ROOM_PRIVATE 19
 
 // Message types - Server to Client
 #define MSG_AUTH_RESPONSE 20
@@ -42,6 +52,10 @@
 #define MSG_LOBBY_UPDATE 22
 #define MSG_GAME_STATE 23
 #define MSG_ERROR 24
+#define MSG_FRIEND_LIST_RESPONSE 25
+#define MSG_PROFILE_RESPONSE 26
+#define MSG_LEADERBOARD_RESPONSE 27
+#define MSG_NOTIFICATION 28
 
 // Movement
 #define MOVE_UP 0
@@ -71,17 +85,47 @@
 #define ERR_NOT_ENOUGH_PLAYERS 4
 #define ERR_ALREADY_IN_LOBBY 5
 
-// Player structure - VỚI POWER-UPS
+// Player structure - WITH POWER-UPS AND ELO
 typedef struct {
     int id;
     int x, y;
     int is_alive;
     int is_ready;
     char username[MAX_USERNAME];
-    int max_bombs;        // Số bom tối đa có thể đặt
-    int bomb_range;       // Tầm nổ
-    int current_bombs;    // Số bom đang đặt
+    char display_name[MAX_DISPLAY_NAME];  // Mutable display name
+    int elo_rating;                       // ELO ranking
+    int max_bombs;                        // Max bombs can place
+    int bomb_range;                       // Explosion range
+    int current_bombs;                    // Current bombs placed
 } Player;
+
+// Friend info structure
+typedef struct {
+    int user_id;
+    char display_name[MAX_DISPLAY_NAME];
+    int elo_rating;
+    int is_online;  // 0=offline, 1=online, 2=in-game
+} FriendInfo;
+
+// Profile/Statistics structure
+typedef struct {
+    char username[MAX_USERNAME];
+    char display_name[MAX_DISPLAY_NAME];
+    int elo_rating;
+    int tier;  // 0=Bronze, 1=Silver, 2=Gold, 3=Diamond
+    int total_matches;
+    int wins;
+    int total_kills;
+    int deaths;
+} ProfileData;
+
+// Leaderboard entry
+typedef struct {
+    int rank;
+    char display_name[MAX_DISPLAY_NAME];
+    int elo_rating;
+    int wins;
+} LeaderboardEntry;
 
 // Lobby structure
 typedef struct {
@@ -103,31 +147,47 @@ typedef struct {
     long long end_game_time;
 } GameState;
 
-// Client packet
+// Client packet - ENHANCED
 typedef struct {
     int type;
     char username[MAX_USERNAME];
+    char email[MAX_EMAIL];             // For registration
     char password[MAX_PASSWORD];
     char room_name[MAX_ROOM_NAME];
+    char access_code[16];              // For private rooms
+    char target_display_name[MAX_DISPLAY_NAME]; // For friend requests
     int lobby_id;
-    int data;
+    int data;                          // General purpose int
+    int target_player_id;              // For kick, friend response
 } ClientPacket;
 
-// Server packet
+// Server packet - ENHANCED
 typedef struct {
     int type;
     int code;
     char message[256];
     union {
         struct {
+            int user_id;
             char username[MAX_USERNAME];
+            char display_name[MAX_DISPLAY_NAME];
+            int elo_rating;
         } auth;
         struct {
             Lobby lobbies[MAX_LOBBIES];
             int count;
         } lobby_list;
+        struct {
+            FriendInfo friends[50];
+            int count;
+        } friend_list;
+        struct {
+            LeaderboardEntry entries[100];
+            int count;
+        } leaderboard;
         Lobby lobby;
         GameState game_state;
+        ProfileData profile;
     } payload;
 } ServerPacket;
 

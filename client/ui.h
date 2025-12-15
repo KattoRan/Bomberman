@@ -27,7 +27,7 @@ extern char lobby_error_message[256];
 
 // Khai báo các hàm UI (Prototype)
 void render_login_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Font *font_small, 
-                        InputField *username, InputField *password,
+                        InputField *username, InputField *email, InputField *password,
                         Button *login_btn, Button *register_btn, 
                         const char *message);
 
@@ -40,5 +40,18 @@ void render_lobby_room_screen(SDL_Renderer *renderer, TTF_Font *font,
                               Lobby *lobby, int my_player_id,
                               Button *ready_btn, Button *start_btn, 
                               Button *leave_btn);
+
+void render_friends_screen(SDL_Renderer *renderer, TTF_Font *font,
+                           FriendInfo *friends, int friend_count,
+                           FriendInfo *pending, int pending_count,
+                           Button *back_btn);
+
+void render_profile_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Font *font_small,
+                           ProfileData *profile,
+                           Button *back_btn);
+
+void render_leaderboard_screen(SDL_Renderer *renderer, TTF_Font *font,
+                               LeaderboardEntry *entries, int entry_count,
+                               Button *back_btn);
 
 #endif
