@@ -9,7 +9,7 @@
 #include "../common/protocol.h"
 #include "ui.h" 
 
-extern void render_game(SDL_Renderer*, TTF_Font*, int);
+extern void render_game(SDL_Renderer*, TTF_Font*, int, int);
 extern TTF_Font* init_font();
 extern void add_notification(const char *text, SDL_Color color);
 
@@ -530,7 +530,7 @@ int main(int argc, char *argv[]) {
             }
 
             case SCREEN_GAME: {
-                render_game(rend, font_small, tick++);
+                render_game(rend, font_small, tick++, my_player_id);
                 break;
             }
 

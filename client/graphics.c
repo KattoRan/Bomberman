@@ -228,7 +228,7 @@ void draw_notifications(SDL_Renderer *renderer, TTF_Font *font) {
     }
 }
 
-void draw_status_bar(SDL_Renderer *renderer, TTF_Font *font) {
+void draw_status_bar(SDL_Renderer *renderer, TTF_Font *font, int my_player_id) {
     int bar_y = MAP_HEIGHT * TILE_SIZE;
     
     SDL_Rect status_bg = {0, bar_y, WINDOW_WIDTH, 50};
@@ -269,7 +269,12 @@ void draw_status_bar(SDL_Renderer *renderer, TTF_Font *font) {
         }
         
         if (current_state.num_players > 0) {
-            Player *p = &current_state.players[0];
+            Player *p = NULL;
+            if (my_player_id >= 0 && my_player_id < MAX_CLIENTS) {
+                p = &current_state.players[my_player_id];
+            } else {
+                p = &current_state.players[0]; // Fallback
+            }
             char powerup_text[128];
             snprintf(powerup_text, sizeof(powerup_text), 
                     "Bombs: %d/%d | Range: %d", 
@@ -289,7 +294,7 @@ void draw_status_bar(SDL_Renderer *renderer, TTF_Font *font) {
     }
 }
 
-void render_game(SDL_Renderer *renderer, TTF_Font *font, int tick) {
+void render_game(SDL_Renderer *renderer, TTF_Font *font, int tick, int my_player_id) {
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
 
@@ -334,7 +339,7 @@ void render_game(SDL_Renderer *renderer, TTF_Font *font, int tick) {
                    player_colors[i % 4]);
     }
 
-    draw_status_bar(renderer, font);
+    draw_status_bar(renderer, font, my_player_id);
     draw_notifications(renderer, font);
     SDL_RenderPresent(renderer);
 }
