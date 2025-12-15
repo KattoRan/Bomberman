@@ -92,6 +92,7 @@ void init_game(GameState *state, Lobby *lobby) {
     
     state->game_status = GAME_RUNNING;
     state->winner_id = -1;
+    state->end_game_time = 0;
     
     printf("[GAME] Initialized with %d players\n", state->num_players);
 }
@@ -227,7 +228,9 @@ void create_explosion_line(GameState *state, int sx, int sy, int dx, int dy, int
             break;
         } else if (tile == BOMB) {
             state->map[y][x] = EXPLOSION;
-            break;
+            // SỬA Ở ĐÂY: Chỉ dừng nếu gặp bom KHÁC (i > 0).
+            // Nếu i == 0 (tâm bom) thì không break để lửa lan tiếp ra các hướng.
+            if (i > 0) break; 
         } else {
             state->map[y][x] = EXPLOSION;
         }

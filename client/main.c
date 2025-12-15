@@ -99,14 +99,14 @@ void check_game_changes() {
         
         // Kiểm tra power-up
         if (current_state.players[i].max_bombs > previous_state.players[i].max_bombs) {
-            if (i == 0) { // Chỉ thông báo cho người chơi hiện tại
+            if (i == my_player_id) { // Chỉ thông báo cho người chơi hiện tại
                 add_notification("Picked up BOMB power-up! +1 Bomb", 
                                (SDL_Color){255, 215, 0, 255});
             }
         }
         
         if (current_state.players[i].bomb_range > previous_state.players[i].bomb_range) {
-            if (i == 0) {
+            if (i == my_player_id) {
                 add_notification("Picked up FIRE power-up! +1 Blast Range", 
                                (SDL_Color){255, 69, 0, 255});
             }

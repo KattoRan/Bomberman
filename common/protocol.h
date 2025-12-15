@@ -100,6 +100,7 @@ typedef struct {
     int num_players;
     int game_status;
     int winner_id;
+    long long end_game_time;
 } GameState;
 
 // Client packet
