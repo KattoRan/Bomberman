@@ -814,7 +814,7 @@ int main(int argc, char *argv[]) {
                     SDL_FreeSurface(surf);
                 }
                 
-                SDL_RenderPresent(rend);
+                //SDL_RenderPresent(rend);
                 
                 // Render dialog overlay if showing
                 if (show_create_room_dialog) {
@@ -826,7 +826,7 @@ int main(int argc, char *argv[]) {
                     // Draw buttons
                     draw_button(rend, font_small, &btn_create_confirm);
                     draw_button(rend, font_small, &btn_cancel);
-                    SDL_RenderPresent(rend);
+                    //SDL_RenderPresent(rend);
                 }
                 
                 // Render join code dialog if showing
@@ -838,7 +838,7 @@ int main(int argc, char *argv[]) {
                     draw_input_field(rend, font_small, &inp_join_code);
                     draw_button(rend, font_small, &btn_create_confirm);
                     draw_button(rend, font_small, &btn_cancel);
-                    SDL_RenderPresent(rend);
+                    //SDL_RenderPresent(rend);
                 }
                 break;
             }

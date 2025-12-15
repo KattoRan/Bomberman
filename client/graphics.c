@@ -341,7 +341,7 @@ void render_game(SDL_Renderer *renderer, TTF_Font *font, int tick, int my_player
 
     draw_status_bar(renderer, font, my_player_id);
     draw_notifications(renderer, font);
-    SDL_RenderPresent(renderer);
+    //SDL_RenderPresent(renderer);
 }
 
 TTF_Font* init_font() {

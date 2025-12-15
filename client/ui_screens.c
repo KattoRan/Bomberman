@@ -309,7 +309,7 @@ void render_login_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Font 
         }
     }
     
-    SDL_RenderPresent(renderer);
+    //SDL_RenderPresent(renderer);
 }
 
 // 2. Màn hình Danh sách phòng - Cải thiện màu sắc
@@ -401,7 +401,7 @@ void render_lobby_list_screen(SDL_Renderer *renderer, TTF_Font *font,
     
     draw_button(renderer, font, create_btn);
     draw_button(renderer, font, refresh_btn);
-    SDL_RenderPresent(renderer);
+    //SDL_RenderPresent(renderer);
 }
 
 // 3. Màn hình Phòng chờ - CẢI THIỆN HOÀN TOÀN
@@ -659,7 +659,7 @@ void render_lobby_room_screen(SDL_Renderer *renderer, TTF_Font *font,
         }
     }
     
-    SDL_RenderPresent(renderer);
+    //SDL_RenderPresent(renderer);
 }/* Room creation dialog rendering - add to ui_screens.c */
 
 void render_create_room_dialog(SDL_Renderer *renderer, TTF_Font *font,
