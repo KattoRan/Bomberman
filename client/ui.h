@@ -29,6 +29,11 @@ extern char lobby_error_message[256];
 void draw_button(SDL_Renderer *renderer, TTF_Font *font, Button *btn);
 void draw_input_field(SDL_Renderer *renderer, TTF_Font *font, InputField *field);
 
+// Modern UI helper functions
+void draw_rounded_rect(SDL_Renderer *renderer, SDL_Rect rect, SDL_Color color, int radius);
+void draw_rounded_border(SDL_Renderer *renderer, SDL_Rect rect, SDL_Color color, int radius, int thickness);
+void draw_layered_shadow(SDL_Renderer *renderer, SDL_Rect rect, int radius, int offset);
+
 // Khai báo các hàm UI (Prototype)
 void render_login_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Font *font_small, 
                         InputField *username, InputField *email, InputField *password,

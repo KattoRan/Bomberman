@@ -322,7 +322,7 @@ void process_server_packet(ServerPacket *pkt) {
                        sizeof(FriendInfo) * sent_count);
             }
             
-            printf("[CLIENT] Received %d friends, %d pending, %d sent\\n", friends_count, pending_count, sent_count);
+            printf("[CLIENT] Received %d friends, %d pending, %d sent \n", friends_count, pending_count, sent_count);
             break;
         
         case MSG_FRIEND_RESPONSE:
@@ -959,44 +959,13 @@ int main(int argc, char *argv[]) {
                     selected_lobby_idx
                 );
                 
-                // Draw additional nav buttons
+                // Draw additional nav buttons - MODERNIZED with rounded corners
                 // Friends button
-                SDL_Color friends_color = btn_friends.is_hovered ? (SDL_Color){96, 165, 250, 255} : (SDL_Color){59, 130, 246, 255};
-                SDL_SetRenderDrawColor(rend, friends_color.r, friends_color.g, friends_color.b, 255);
-                SDL_RenderFillRect(rend, &btn_friends.rect);
-                SDL_Surface *surf = TTF_RenderText_Blended(font_small, btn_friends.text, (SDL_Color){255, 255, 255, 255});
-                if (surf) {
-                    SDL_Texture *tex = SDL_CreateTextureFromSurface(rend, surf);
-                    SDL_Rect r = {btn_friends.rect.x + (btn_friends.rect.w - surf->w)/2, btn_friends.rect.y + (btn_friends.rect.h - surf->h)/2, surf->w, surf->h};
-                    SDL_RenderCopy(rend, tex, NULL, &r);
-                    SDL_DestroyTexture(tex);
-                    SDL_FreeSurface(surf);
-                }
+                draw_button(rend, font_small, &btn_friends);
                 
                 // Profile & Leaderboard buttons (top right)
-                SDL_Color prof_color = btn_profile.is_hovered ? (SDL_Color){96, 165, 250, 255} : (SDL_Color){59, 130, 246, 255};
-                SDL_SetRenderDrawColor(rend, prof_color.r, prof_color.g, prof_color.b, 255);
-                SDL_RenderFillRect(rend, &btn_profile.rect);
-                surf = TTF_RenderText_Blended(font_small, btn_profile.text, (SDL_Color){255, 255, 255, 255});
-                if (surf) {
-                    SDL_Texture *tex = SDL_CreateTextureFromSurface(rend, surf);
-                    SDL_Rect r = {btn_profile.rect.x + (btn_profile.rect.w - surf->w)/2, btn_profile.rect.y + (btn_profile.rect.h - surf->h)/2, surf->w, surf->h};
-                    SDL_RenderCopy(rend, tex, NULL, &r);
-                    SDL_DestroyTexture(tex);
-                    SDL_FreeSurface(surf);
-                }
-                
-                SDL_Color lead_color = btn_leaderboard.is_hovered ? (SDL_Color){96, 165, 250, 255} : (SDL_Color){59, 130, 246, 255};
-                SDL_SetRenderDrawColor(rend, lead_color.r, lead_color.g, lead_color.b, 255);
-                SDL_RenderFillRect(rend, &btn_leaderboard.rect);
-                surf = TTF_RenderText_Blended(font_small, btn_leaderboard.text, (SDL_Color){255, 255, 255, 255});
-                if (surf) {
-                    SDL_Texture *tex = SDL_CreateTextureFromSurface(rend, surf);
-                    SDL_Rect r = {btn_leaderboard.rect.x + (btn_leaderboard.rect.w - surf->w)/2, btn_leaderboard.rect.y + (btn_leaderboard.rect.h - surf->h)/2, surf->w, surf->h};
-                    SDL_RenderCopy(rend, tex, NULL, &r);
-                    SDL_DestroyTexture(tex);
-                    SDL_FreeSurface(surf);
-                }
+                draw_button(rend, font_small, &btn_profile);
+                draw_button(rend, font_small, &btn_leaderboard);
                 
                 //SDL_RenderPresent(rend);
                 
@@ -1066,23 +1035,30 @@ int main(int argc, char *argv[]) {
                 draw_input_field(rend, font_small, &inp_friend_request);
                 draw_button(rend, font_small, &btn_send_friend_request);
                 
-                // Draw delete confirmation dialog if active
+                // Draw delete confirmation dialog if active - MODERNIZED
                 if (show_delete_confirm && delete_friend_index >= 0 && delete_friend_index < friends_count) {
                     int win_w, win_h;
                     SDL_GetRendererOutputSize(rend, &win_w, &win_h);
                     
                     // Semi-transparent overlay
                     SDL_SetRenderDrawBlendMode(rend, SDL_BLENDMODE_BLEND);
-                    SDL_SetRenderDrawColor(rend, 0, 0, 0, 180);
+                    SDL_SetRenderDrawColor(rend, 0, 0, 0, 200);
                     SDL_Rect overlay = {0, 0, win_w, win_h};
                     SDL_RenderFillRect(rend, &overlay);
                     
-                    // Dialog box
+                    // Modern dialog box with rounded corners
                     SDL_Rect dialog = {250, 250, 300, 150};
-                    SDL_SetRenderDrawColor(rend, 30, 41, 59, 255);
-                    SDL_RenderFillRect(rend, &dialog);
-                    SDL_SetRenderDrawColor(rend, 59, 130, 246, 255);
-                    SDL_RenderDrawRect(rend, &dialog);
+                    
+                    // Layered shadow
+                    draw_layered_shadow(rend, dialog, 12, 6);
+                    
+                    // Dialog background
+                    SDL_Color dialog_bg = {30, 41, 59, 255};
+                    draw_rounded_rect(rend, dialog, dialog_bg, 12);
+                    
+                    // Dialog border
+                    SDL_Color border_col = {59, 130, 246, 255};
+                    draw_rounded_border(rend, dialog, border_col, 12, 2);
                     
                     // Title
                     SDL_Surface *surf = TTF_RenderText_Blended(font_small, "Delete Friend?", (SDL_Color){255, 255, 255, 255});
@@ -1106,10 +1082,12 @@ int main(int argc, char *argv[]) {
                         SDL_FreeSurface(surf);
                     }
                     
-                    // Yes button (red)
+                    // Modern Yes button (rounded, red with shadow)
                     SDL_Rect yes_btn = {300, 350, 100, 40};
-                    SDL_SetRenderDrawColor(rend, 239, 68, 68, 255);
-                    SDL_RenderFillRect(rend, &yes_btn);
+                    draw_layered_shadow(rend, yes_btn, 6, 3);
+                    SDL_Color yes_bg = {239, 68, 68, 255};
+                    draw_rounded_rect(rend, yes_btn, yes_bg, 6);
+                    
                     surf = TTF_RenderText_Blended(font_small, "Yes", (SDL_Color){255, 255, 255, 255});
                     if (surf) {
                         SDL_Texture *tex = SDL_CreateTextureFromSurface(rend, surf);
@@ -1119,10 +1097,12 @@ int main(int argc, char *argv[]) {
                         SDL_FreeSurface(surf);
                     }
                     
-                    // No button (gray)
+                    // Modern No button (rounded, gray with shadow)
                     SDL_Rect no_btn = {420, 350, 100, 40};
-                    SDL_SetRenderDrawColor(rend, 100, 116, 139, 255);
-                    SDL_RenderFillRect(rend, &no_btn);
+                    draw_layered_shadow(rend, no_btn, 6, 3);
+                    SDL_Color no_bg = {100, 116, 139, 255};
+                    draw_rounded_rect(rend, no_btn, no_bg, 6);
+                    
                     surf = TTF_RenderText_Blended(font_small, "No", (SDL_Color){255, 255, 255, 255});
                     if (surf) {
                         SDL_Texture *tex = SDL_CreateTextureFromSurface(rend, surf);
@@ -1155,7 +1135,7 @@ int main(int argc, char *argv[]) {
                 break;
         }
         
-        // Render notifications at top center
+        // Render notifications at top center - MODERNIZED
         if (notification_message[0] != '\0' && SDL_GetTicks() - notification_time < NOTIFICATION_DURATION) {
             int win_w, win_h;
             SDL_GetRendererOutputSize(rend, &win_w, &win_h);
@@ -1167,19 +1147,20 @@ int main(int argc, char *argv[]) {
                 int box_x = (win_w - box_w) / 2;
                 int box_y = 20;
                 
-                // Shadow
-                SDL_Rect shadow = {box_x + 2, box_y + 2, box_w, box_h};
-                SDL_SetRenderDrawColor(rend, 0, 0, 0, 100);
-                SDL_RenderFillRect(rend, &shadow);
-                
-                // Background
                 SDL_Rect bg = {box_x, box_y, box_w, box_h};
-                SDL_SetRenderDrawColor(rend, 59, 130, 246, 230);
-                SDL_RenderFillRect(rend, &bg);
                 
-                // Border
-                SDL_SetRenderDrawColor(rend, 96, 165, 250, 255);
-                SDL_RenderDrawRect(rend, &bg);
+                // Layered shadow for depth
+                draw_layered_shadow(rend, bg, 8, 4);
+                
+                // Background with rounded corners
+                SDL_Color notif_bg = {59, 130, 246, 230};
+                SDL_SetRenderDrawBlendMode(rend, SDL_BLENDMODE_BLEND);
+                draw_rounded_rect(rend, bg, notif_bg, 8);
+                
+                // Border with accent color
+                SDL_Color notif_border = {96, 165, 250, 255};
+                draw_rounded_border(rend, bg, notif_border, 8, 2);
+                SDL_SetRenderDrawBlendMode(rend, SDL_BLENDMODE_NONE);
                 
                 // Text
                 SDL_Texture *tex = SDL_CreateTextureFromSurface(rend, notif);
