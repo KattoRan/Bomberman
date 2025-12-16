@@ -567,6 +567,77 @@ int main() {
                         printf("[GAME] Lobby %d ended. Winner: %d\n", 
                                i, active_games[i].winner_id);
                         
+                        // === NEW: ELO AND STATS CALCULATION ===
+                        GameState *gs = &active_games[i];
+                        int player_ids[MAX_CLIENTS];
+                        int placements[MAX_CLIENTS];
+                        int kills[MAX_CLIENTS] = {0};  // TODO: Track kills during gameplay
+                        
+                        // Map player usernames to user_ids
+                        for (int j = 0; j < gs->num_players; j++) {
+                            // Find the client with this username
+                            int found_user_id = -1;
+                            for (int k = 0; k < num_clients; k++) {
+                                if (clients[k].is_authenticated && 
+                                    strcmp(clients[k].username, gs->players[j].username) == 0) {
+                                    found_user_id = clients[k].user_id;
+                                    break;
+                                }
+                            }
+                            
+                            player_ids[j] = found_user_id;
+                            
+                            // Determine placement: winner = 1, others = 2
+                            if (j == gs->winner_id) {
+                                placements[j] = 1;  // Winner
+                            } else {
+                                placements[j] = 2;  // Loser
+                            }
+                            
+                            printf("[ELO] Player %s (user_id: %d) -> Placement: %d\n", 
+                                   gs->players[j].username, player_ids[j], placements[j]);
+                        }
+                        
+                        // Calculate match duration (for now, use 0 as placeholder)
+                        int duration_seconds = 0;  // TODO: Track actual match duration
+                        
+                        // Update ELO ratings
+                        if (elo_update_after_match(player_ids, placements, gs->num_players) == 0) {
+                            printf("[ELO] Successfully updated ELO ratings\n");
+                        } else {
+                            printf("[ELO] ERROR: Failed to update ELO ratings\n");
+                        }
+                        
+                        // Record match statistics
+                        int match_id = stats_record_match(player_ids, placements, kills, 
+                                                         gs->num_players, gs->winner_id, 
+                                                         duration_seconds);
+                        if (match_id >= 0) {
+                            printf("[STATS] Match recorded with ID: %d\n", match_id);
+                        } else {
+                            printf("[STATS] ERROR: Failed to record match\n");
+                        }
+                        
+                        // Send notification to players about ELO changes
+                        for (int j = 0; j < num_clients; j++) {
+                            if (clients[j].lobby_id == i && clients[j].is_authenticated) {
+                                ServerPacket notif;
+                                memset(&notif, 0, sizeof(ServerPacket));
+                                notif.type = MSG_NOTIFICATION;
+                                notif.code = 0;
+                                
+                                if (gs->winner_id >= 0 && 
+                                    strcmp(clients[j].username, gs->players[gs->winner_id].username) == 0) {
+                                    sprintf(notif.message, "Victory! ELO updated.");
+                                } else {
+                                    sprintf(notif.message, "Match ended. ELO updated.");
+                                }
+                                
+                                send_response(clients[j].socket_fd, &notif);
+                            }
+                        }
+                        // === END ELO AND STATS ===
+                        
                         lb->status = LOBBY_WAITING;
                         
                         // Reset all players to not ready

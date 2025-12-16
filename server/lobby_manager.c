@@ -4,7 +4,6 @@
 #include "../common/protocol.h"
 
 Lobby lobbies[MAX_LOBBIES];
-int next_lobby_id = 0;
 
 void init_lobbies() {
     for (int i = 0; i < MAX_LOBBIES; i++) {
@@ -40,7 +39,7 @@ int create_lobby(const char *room_name, const char *host_username, int is_privat
     }
     
     Lobby *lobby = &lobbies[slot];
-    lobby->id = next_lobby_id++;
+    lobby->id = slot;  // Use slot index as ID for consistency
     strncpy(lobby->name, room_name, MAX_ROOM_NAME - 1);
     lobby->name[MAX_ROOM_NAME - 1] = '\0';
     lobby->num_players = 1;
