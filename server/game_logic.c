@@ -10,6 +10,12 @@
 #define EXPLOSION_TIMER 500
 #define POWERUP_CHANCE 30  // 30% cơ hội xuất hiện power-up
 
+// Power-up limits - ADJUSTED
+#define MAX_BOMB_CAPACITY 3   // User requested: max 3 bombs
+#define MAX_BOMB_RANGE 4      // User requested: max 4 range
+#define MAX_MOVE_SPEED 2.0f
+#define BASE_MOVE_SPEED 1.0f
+
 typedef struct {
     int x, y;
     long long plant_time;
@@ -48,7 +54,7 @@ void init_map(GameState *state) {
         }
     }
     
-    srand(time(NULL));
+    // srand() moved to server startup - removed from here for better randomness
     for (int y = 1; y < MAP_HEIGHT - 1; y++) {
         for (int x = 1; x < MAP_WIDTH - 1; x++) {
             if (state->map[y][x] == EMPTY) {
@@ -100,33 +106,55 @@ void init_game(GameState *state, Lobby *lobby) {
 int can_move_to(GameState *state, int x, int y) {
     if (x < 0 || x >= MAP_WIDTH || y < 0 || y >= MAP_HEIGHT) return 0;
     int tile = state->map[y][x];
-    return (tile == EMPTY || tile == EXPLOSION || 
+    // FIXED: Can't walk through bombs or explosions anymore!
+    return (tile == EMPTY || 
             tile == POWERUP_BOMB || tile == POWERUP_FIRE || tile == POWERUP_SPEED);
 }
 
-void pickup_powerup(GameState *state, Player *p, int x, int y) {
+// Returns: 0=nothing, 1=picked up, 2=already at max
+int pickup_powerup(GameState *state, Player *p, int x, int y) {
     int tile = state->map[y][x];
     
     switch (tile) {
         case POWERUP_BOMB:
-            p->max_bombs++;
-            printf("[GAME] Player %s picked up BOMB power-up! Max bombs: %d\n", 
-                   p->username, p->max_bombs);
-            state->map[y][x] = EMPTY;
+            if (p->max_bombs < MAX_BOMB_CAPACITY) {
+                p->max_bombs++;
+                printf("[GAME] Player %s picked up BOMB power-up! Max bombs: %d/%d\n", 
+                       p->username, p->max_bombs, MAX_BOMB_CAPACITY);
+                state->map[y][x] = EMPTY;
+                return 1;  // Picked up
+            } else {
+                printf("[GAME] Player %s already at max bombs (%d)\n", 
+                       p->username, MAX_BOMB_CAPACITY);
+                state->map[y][x] = EMPTY;  // Still consume it
+                return 2;  // At max
+            }
             break;
             
         case POWERUP_FIRE:
-            p->bomb_range++;
-            printf("[GAME] Player %s picked up FIRE power-up! Range: %d\n", 
-                   p->username, p->bomb_range);
-            state->map[y][x] = EMPTY;
+            if (p->bomb_range < MAX_BOMB_RANGE) {
+                p->bomb_range++;
+                printf("[GAME] Player %s picked up FIRE power-up! Range: %d/%d\n", 
+                       p->username, p->bomb_range, MAX_BOMB_RANGE);
+                state->map[y][x] = EMPTY;
+                return 1;  // Picked up
+            } else {
+                printf("[GAME] Player %s already at max range (%d)\n", 
+                       p->username, MAX_BOMB_RANGE);
+                state->map[y][x] = EMPTY;  // Still consume it
+                return 2;  // At max
+            }
             break;
             
         case POWERUP_SPEED:
-            printf("[GAME] Player %s picked up SPEED power-up!\n", p->username);
+            // TODO: Implement speed in Player struct
+            // For now, just acknowledge pickup
+            printf("[GAME] Player %s picked up SPEED power-up! (Speed boost not yet implemented)\n", 
+                   p->username);
             state->map[y][x] = EMPTY;
-            break;
+            return 1;  // Picked up
     }
+    return 0;  // Nothing happened
 }
 
 int handle_move(GameState *state, int player_id, int direction) {
@@ -148,8 +176,8 @@ int handle_move(GameState *state, int player_id, int direction) {
     if (can_move_to(state, nx, ny)) {
         p->x = nx;
         p->y = ny;
-        pickup_powerup(state, p, nx, ny);
-        return 1;
+        int pickup_status = pickup_powerup(state, p, nx, ny);
+        return (pickup_status == 0) ? 1 : (pickup_status + 10); // 1=moved, 11=picked up, 12=at max
     }
     return 0;
 }
@@ -227,10 +255,19 @@ void create_explosion_line(GameState *state, int sx, int sy, int dx, int dy, int
             spawn_powerup(state, x, y);
             break;
         } else if (tile == BOMB) {
+            // FIXED: Need to trigger this bomb immediately!
+            // Find and detonate the bomb at this position
+            for (int b = 0; b < MAX_BOMBS; b++) {
+                if (bombs[b].is_active && bombs[b].x == x && bombs[b].y == y) {
+                    // Force immediate detonation by setting plant_time to past
+                    bombs[b].plant_time = get_time_ms() - BOMB_TIMER - 1;
+                    printf("[GAME] Chain reaction! Bomb at (%d,%d) triggered!\n", x, y);
+                    break;
+                }
+            }
             state->map[y][x] = EXPLOSION;
-            // SỬA Ở ĐÂY: Chỉ dừng nếu gặp bom KHÁC (i > 0).
-            // Nếu i == 0 (tâm bom) thì không break để lửa lan tiếp ra các hướng.
-            if (i > 0) break; 
+            // Stop explosion propagation after hitting another bomb
+            if (i > 0) break;
         } else {
             state->map[y][x] = EXPLOSION;
         }

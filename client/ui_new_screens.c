@@ -22,6 +22,14 @@ extern const SDL_Color CLR_DANGER;
 extern const SDL_Color CLR_INPUT_BG;
 extern const SDL_Color CLR_GLOW;
 
+// Responsive design helpers from ui_screens.c
+#define SCREEN_PERCENT_W(w, pct) ((int)((w) * (pct) / 100.0f))
+#define SCREEN_PERCENT_H(h, pct) ((int)((h) * (pct) / 100.0f))
+
+extern int get_button_width(int screen_w);
+extern int get_button_height(int screen_h);
+extern int get_spacing(int screen_h);
+
 // External helper functions from ui_screens.c
 extern void draw_rounded_rect(SDL_Renderer *renderer, SDL_Rect rect, SDL_Color color, int radius);
 extern void draw_rounded_border(SDL_Renderer *renderer, SDL_Rect rect, SDL_Color color, int radius, int thickness);
@@ -51,8 +59,9 @@ void render_friends_screen(SDL_Renderer *renderer, TTF_Font *font,
         SDL_FreeSurface(surf);
     }
     
-    // Friends list section
-    int list_y = 100;
+    // Friends list section - RESPONSIVE
+    int list_y = SCREEN_PERCENT_H(win_h, 15);
+    int card_width = SCREEN_PERCENT_W(win_w, 27);  // 27% of screen
     char title[64];
     snprintf(title, sizeof(title), "Your Friends (%d)", friend_count);
     surf = TTF_RenderText_Blended(font, title, white);
@@ -64,10 +73,10 @@ void render_friends_screen(SDL_Renderer *renderer, TTF_Font *font,
         SDL_FreeSurface(surf);
     }
     
-    // Friend cards with modern styling
+    // Friend cards with responsive sizing
     list_y += 40;
     for (int i = 0; i < friend_count && i < 5; i++) {
-        SDL_Rect card = {50, list_y, 350, 65};
+        SDL_Rect card = {50, list_y, card_width, get_button_height(win_h) + 20};
         
         // Layered shadow
         draw_layered_shadow(renderer, card, UI_CORNER_RADIUS, 3);
@@ -129,22 +138,23 @@ void render_friends_screen(SDL_Renderer *renderer, TTF_Font *font,
         list_y += 75;
     }
     
-    // Pending requests section
-    int pending_y = 100;
+    // Pending requests section - RESPONSIVE
+    int pending_y = SCREEN_PERCENT_H(win_h, 15);
+    int pending_x = SCREEN_PERCENT_W(win_w, 35);  // 35% from left
     snprintf(title, sizeof(title), "Pending Requests (%d)", pending_count);
     surf = TTF_RenderText_Blended(font, title, white);
     if (surf) {
         SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, surf);
-        SDL_Rect rect = {450, pending_y, surf->w, surf->h};
+        SDL_Rect rect = {pending_x, pending_y, surf->w, surf->h};
         SDL_RenderCopy(renderer, tex, NULL, &rect);
         SDL_DestroyTexture(tex);
         SDL_FreeSurface(surf);
     }
     
-    // Pending request cards - MODERNIZED
+    // Pending request cards - RESPONSIVE
     pending_y += 40;
     for (int i = 0; i < pending_count && i < 5; i++) {
-        SDL_Rect card = {450, pending_y, 350, 60};
+        SDL_Rect card = {pending_x, pending_y, card_width, get_button_height(win_h) + 15};
         
         // Layered shadow
         draw_layered_shadow(renderer, card, UI_CORNER_RADIUS, 3);
@@ -165,8 +175,9 @@ void render_friends_screen(SDL_Renderer *renderer, TTF_Font *font,
             SDL_FreeSurface(surf);
         }
         
-        // Accept button (rounded green)
-        SDL_Rect accept_btn = {460, pending_y + 32, 80, 24};
+        // Accept button (rounded green) - RESPONSIVE
+        int btn_w = get_button_width(win_w) * 0.6;  // 60% of normal button
+        SDL_Rect accept_btn = {pending_x + 10, pending_y + 32, btn_w, get_button_height(win_h) * 0.6};
         draw_rounded_rect(renderer, accept_btn, CLR_SUCCESS, 4);
         surf = TTF_RenderText_Blended(font, "Accept", white);
         if (surf) {
@@ -177,8 +188,8 @@ void render_friends_screen(SDL_Renderer *renderer, TTF_Font *font,
             SDL_FreeSurface(surf);
         }
         
-        // Decline button (rounded red)
-        SDL_Rect decline_btn = {550, pending_y + 32, 80, 24};
+        // Decline button (rounded red) - RESPONSIVE
+        SDL_Rect decline_btn = {pending_x + 20 + btn_w, pending_y + 32, btn_w, get_button_height(win_h) * 0.6};
         draw_rounded_rect(renderer, decline_btn, CLR_DANGER, 4);
         surf = TTF_RenderText_Blended(font, "Decline", white);
         if (surf) {
@@ -192,25 +203,26 @@ void render_friends_screen(SDL_Renderer *renderer, TTF_Font *font,
         pending_y += 70;
     }
     
-    // Sent requests section (outgoing)
+    // Sent requests section (outgoing) - RESPONSIVE
     extern FriendInfo sent_requests[];
     extern int sent_count;
     
-    int sent_y = 100;
+    int sent_y = SCREEN_PERCENT_H(win_h, 55);  // 55% from top
+    int sent_x = pending_x;  // Same x as pending
     snprintf(title, sizeof(title), "Sent Requests (%d)", sent_count);
     surf = TTF_RenderText_Blended(font, title, white);
     if (surf) {
         SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, surf);
-        SDL_Rect rect = {450, sent_y + 320, surf->w, surf->h};
+        SDL_Rect rect = {sent_x, sent_y, surf->w, surf->h};
         SDL_RenderCopy(renderer, tex, NULL, &rect);
         SDL_DestroyTexture(tex);
         SDL_FreeSurface(surf);
     }
     
-    // Sent request cards - MODERNIZED
-    sent_y += 360;
+    // Sent request cards - RESPONSIVE
+    sent_y += 40;
     for (int i = 0; i < sent_count && i < 3; i++) {
-        SDL_Rect card = {450, sent_y, 350, 50};
+        SDL_Rect card = {sent_x, sent_y, card_width, get_button_height(win_h) + 5};
         
         // Layered shadow
         draw_layered_shadow(renderer, card, UI_CORNER_RADIUS, 3);
@@ -241,8 +253,8 @@ void render_friends_screen(SDL_Renderer *renderer, TTF_Font *font,
             SDL_FreeSurface(surf);
         }
         
-        // Cancel button (rounded red X)
-        SDL_Rect cancel_btn = {760, sent_y + 13, 30, 24};
+        // Cancel button (rounded red X) - RESPONSIVE
+        SDL_Rect cancel_btn = {sent_x + card_width - 35, sent_y + 8, 30, 24};
         draw_rounded_rect(renderer, cancel_btn, CLR_DANGER, 4);
         surf = TTF_RenderText_Blended(font, "X", white);
         if (surf) {
@@ -268,8 +280,8 @@ void render_friends_screen(SDL_Renderer *renderer, TTF_Font *font,
     
     // Note: Input field and button rendered separately in main.c
     
-    // Back button - MODERNIZED (using draw_button helper)
-    back_btn->rect = (SDL_Rect){win_w/2 - 75, win_h - 60, 150, 50};
+    // Back button - RESPONSIVE
+    back_btn->rect = (SDL_Rect){win_w/2 - get_button_width(win_w)/2, win_h - SCREEN_PERCENT_H(win_h, 10), get_button_width(win_w), get_button_height(win_h)};
     strcpy(back_btn->text, "Back");
     draw_button(renderer, font, back_btn);
 }
@@ -304,9 +316,11 @@ void render_profile_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Fon
     }
     
     if (profile) {
-        // Large ELO rating card (center, prominent)
-        int elo_y = 120;
-        SDL_Rect elo_card = {win_w/2 - 150, elo_y, 300, 100};
+        // Large ELO rating card (center, prominent) - RESPONSIVE
+        int elo_y = SCREEN_PERCENT_H(win_h, 18);
+        int elo_card_w = SCREEN_PERCENT_W(win_w, 25);  // 25% of width
+        int elo_card_h = get_button_height(win_h) * 2;  // Double button height
+        SDL_Rect elo_card = {win_w/2 - elo_card_w/2, elo_y, elo_card_w, elo_card_h};
         draw_layered_shadow(renderer, elo_card, UI_CORNER_RADIUS, 5);
         draw_rounded_rect(renderer, elo_card, CLR_PRIMARY, UI_CORNER_RADIUS);
         draw_rounded_border(renderer, elo_card, CLR_ACCENT, UI_CORNER_RADIUS, 2);
@@ -333,11 +347,11 @@ void render_profile_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Fon
             SDL_FreeSurface(surf);
         }
         
-        // Stats cards in a 2x2 grid
-        int card_y = 250;
-        int card_w = 220;
-        int card_h = 80;
-        int spacing = 20;
+        // 2x2 Grid of stat cards - RESPONSIVE
+        int grid_y = elo_y + elo_card_h + get_spacing(win_h) * 2;
+        int card_w = SCREEN_PERCENT_W(win_w, 17);  // 17% width each
+        int card_h = get_button_height(win_h) * 1.5;  // 1.5x button height
+        int spacing = get_spacing(win_h);
         int start_x = win_w/2 - (card_w + spacing/2);
         
         typedef struct {
@@ -357,7 +371,7 @@ void render_profile_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Fon
             int col = i % 2;
             int row = i / 2;
             int x = start_x + col * (card_w + spacing);
-            int y = card_y + row * (card_h + spacing);
+            int y = grid_y + row * (card_h + spacing);
             
             SDL_Rect card = {x, y, card_w, card_h};
             draw_layered_shadow(renderer, card, UI_CORNER_RADIUS, 3);
@@ -388,8 +402,8 @@ void render_profile_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Fon
         }
     }
     
-    // Back button (now using draw_button)
-    back_btn->rect = (SDL_Rect){win_w/2 - 75, win_h - 80, 150, 50};
+    // Back button - RESPONSIVE
+    back_btn->rect = (SDL_Rect){win_w/2 - get_button_width(win_w)/2, win_h - SCREEN_PERCENT_H(win_h, 10), get_button_width(win_w), get_button_height(win_h)};
     strcpy(back_btn->text, "Back");
     draw_button(renderer, font_small, back_btn);
 }
@@ -423,11 +437,11 @@ void render_leaderboard_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF
         SDL_FreeSurface(surf);
     }
     
-    // Leaderboard entries with modern card design
-    int y = 110;
+    // Leaderboard entries with responsive card design
+    int y = SCREEN_PERCENT_H(win_h, 16);
     int max_entries = entry_count < 10 ? entry_count : 10;
-    int row_width = 700;
-    int row_height = 60;
+    int row_width = SCREEN_PERCENT_W(win_w, 55);  // 55% width
+    int row_height = get_button_height(win_h) + 10;  // Scale with screen
     int start_x = (win_w - row_width) / 2;
     
     // Medal colors for top 3
@@ -452,8 +466,8 @@ void render_leaderboard_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF
         SDL_Color border = (i < 3) ? medal_colors[i] : CLR_GRAY;
         draw_rounded_border(renderer, row, border, UI_CORNER_RADIUS, (i < 3) ? 2 : 1);
         
-        // Rank badge (circular)
-        int badge_size = 40;
+        // Rank badge (circular) - RESPONSIVE
+        int badge_size = get_button_height(win_h) * 0.7;  // 70% of button height
         SDL_Rect rank_badge = {start_x + 15, y + (row_height - badge_size)/2, badge_size, badge_size};
         SDL_Color badge_color = (i < 3) ? medal_colors[i] : CLR_PRIMARY;
         draw_rounded_rect(renderer, rank_badge, badge_color, badge_size/2);
@@ -480,7 +494,7 @@ void render_leaderboard_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF
         surf = TTF_RenderText_Blended(font_small, entries[i].display_name, name_color);
         if (surf) {
             SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, surf);
-            SDL_Rect rect = {start_x + 70, y + 12, surf->w, surf->h};
+            SDL_Rect rect = {start_x + badge_size + 25, y + 12, surf->w, surf->h};
             SDL_RenderCopy(renderer, tex, NULL, &rect);
             SDL_DestroyTexture(tex);
             SDL_FreeSurface(surf);
@@ -492,18 +506,17 @@ void render_leaderboard_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF
         surf = TTF_RenderText_Blended(font_small, info, CLR_GRAY);
         if (surf) {
             SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, surf);
-            SDL_Rect rect = {start_x + 70, y + 35, surf->w, surf->h};
+            SDL_Rect rect = {start_x + badge_size + 25, y + row_height - 20, surf->w, surf->h};
             SDL_RenderCopy(renderer, tex, NULL, &rect);
             SDL_DestroyTexture(tex);
             SDL_FreeSurface(surf);
         }
         
-        y += row_height + 8;
+        y += row_height + get_spacing(win_h);
     }
     
-    // Back button (using draw_button)
-    back_btn->rect = (SDL_Rect){win_w/2 - 75, win_h - 70, 150, 50};
+    // Back button - RESPONSIVE
+    back_btn->rect = (SDL_Rect){win_w/2 - get_button_width(win_w)/2, win_h - SCREEN_PERCENT_H(win_h, 10), get_button_width(win_w), get_button_height(win_h)};
     strcpy(back_btn->text, "Back");
     draw_button(renderer, font_small, back_btn);
 }
-

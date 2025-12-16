@@ -354,6 +354,15 @@ void process_server_packet(ServerPacket *pkt) {
                    sizeof(LeaderboardEntry) * leaderboard_count);
             printf("[CLIENT] Received %d leaderboard entries\n", leaderboard_count);
             break;
+            
+        case MSG_NOTIFICATION:
+            // Handle notifications (including power-up caps during game)
+            if (pkt->message[0] != '\0') {
+                snprintf(notification_message, sizeof(notification_message), "%s", pkt->message);
+                notification_time = SDL_GetTicks();
+                printf("[CLIENT] Notification: %s\n", pkt->message);
+            }
+            break;
     }
 }
 
@@ -617,19 +626,57 @@ int main(int argc, char *argv[]) {
                     if (show_create_room_dialog) {
                         if (e.type == SDL_MOUSEBUTTONDOWN) {
                             inp_room_name.is_active = is_mouse_inside(inp_room_name.rect, mx, my);
-                            inp_access_code.is_active = is_mouse_inside(inp_access_code.rect, mx, my);
+inp_access_code.is_active = is_mouse_inside(inp_access_code.rect, mx, my);
+                            
+                            // Random button - generates 6-digit code
+                            SDL_Rect btn_random = {inp_access_code.rect.x + inp_access_code.rect.w + 10, 
+                                                  inp_access_code.rect.y, 80, inp_access_code.rect.h};
+                            if (is_mouse_inside(btn_random, mx, my)) {
+                                // Generate random 6-digit code (100000-999999)
+                                int random_code = 100000 + (rand() % 900000);
+                                snprintf(inp_access_code.text, sizeof(inp_access_code.text), "%d", random_code);
+                            }
                             
                             if (is_mouse_inside(btn_create_confirm.rect, mx, my)) {
-                                ClientPacket pkt;
-                                memset(&pkt, 0, sizeof(pkt));
-                                pkt.type = MSG_CREATE_LOBBY;
-                                strncpy(pkt.room_name, inp_room_name.text, MAX_ROOM_NAME - 1);
-                                pkt.is_private = (strlen(inp_access_code.text) == 6) ? 1 : 0;
-                                if (pkt.is_private) {
-                                    strncpy(pkt.access_code, inp_access_code.text, 7);
+                                // Validate access code if provided
+                                int code_len = strlen(inp_access_code.text);
+                                int is_valid = 1;
+                                char error_msg[128] = "";
+                                
+                                if (code_len > 0) {
+                                    // Check if exactly 6 digits
+                                    if (code_len != 6) {
+                                        is_valid = 0;
+                                        snprintf(error_msg, sizeof(error_msg), 
+                                                "Access code must be exactly 6 digits! (Currently: %d)", code_len);
+                                    } else {
+                                        // Check if all characters are digits
+                                        for (int i = 0; i < code_len; i++) {
+                                            if (inp_access_code.text[i] < '0' || inp_access_code.text[i] > '9') {
+                                                is_valid = 0;
+                                                strcpy(error_msg, "Access code must contain only numbers!");
+                                                break;
+                                            }
+                                        }
+                                    }
                                 }
-                                send(sock, &pkt, sizeof(pkt), 0);
-                                show_create_room_dialog = 0;
+                                
+                                if (is_valid) {
+                                    ClientPacket pkt;
+                                    memset(&pkt, 0, sizeof(pkt));
+                                    pkt.type = MSG_CREATE_LOBBY;
+                                    strncpy(pkt.room_name, inp_room_name.text, MAX_ROOM_NAME - 1);
+                                    pkt.is_private = (code_len == 6) ? 1 : 0;
+                                    if (pkt.is_private) {
+                                        strncpy(pkt.access_code, inp_access_code.text, 7);
+                                    }
+                                    send(sock, &pkt, sizeof(pkt), 0);
+                                    show_create_room_dialog = 0;
+                                } else {
+                                    // Show error notification
+                                    snprintf(notification_message, sizeof(notification_message), "%s", error_msg);
+                                    notification_time = SDL_GetTicks();
+                                }
                             }
                             if (is_mouse_inside(btn_cancel.rect, mx, my)) {
                                 show_create_room_dialog = 0;

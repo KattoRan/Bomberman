@@ -110,8 +110,26 @@ void handle_client_packet(int socket_fd, ClientPacket *pkt) {
                 }
 
                 if (p_id != -1) {
+                    ServerPacket notif;
+                    memset(&notif, 0, sizeof(ServerPacket));
+                    
                     if (pkt->type == MSG_MOVE) {
-                        handle_move(gs, p_id, pkt->data);
+                        int move_result = handle_move(gs, p_id, pkt->data);
+                        
+                        // Check if power-up was involved
+                        if (move_result == 11) {
+                            // Picked up power-up
+                            notif.type = MSG_NOTIFICATION;
+                            notif.code = 0;
+                            sprintf(notif.message, "Power-up collected!");
+                            send_response(client->socket_fd, &notif);
+                        } else if (move_result == 12) {
+                            // Already at max
+                            notif.type = MSG_NOTIFICATION;
+                            notif.code = 1;
+                            sprintf(notif.message, "Already at maximum capacity!");
+                            send_response(client->socket_fd, &notif);
+                        }
                     } else if (pkt->type == MSG_PLANT_BOMB) {
                         plant_bomb(gs, p_id);
                     }
@@ -440,6 +458,9 @@ int main() {
         fprintf(stderr, "Failed to initialize database\n");
         return 1;
     }
+    
+    // Initialize random number generator ONCE at startup
+    srand(time(NULL));
     
     init_lobbies();
     int server_fd = init_server_socket();
