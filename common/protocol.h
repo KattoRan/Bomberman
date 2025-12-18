@@ -48,6 +48,7 @@
 #define MSG_GET_LEADERBOARD 20
 #define MSG_KICK_PLAYER 21
 #define MSG_SET_ROOM_PRIVATE 22
+#define MSG_LEAVE_GAME 23   // Forfeit while in-game
 
 // Message types - Server to Client
 #define MSG_AUTH_RESPONSE 20

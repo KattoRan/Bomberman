@@ -12,6 +12,8 @@
 extern void render_game(SDL_Renderer*, TTF_Font*, int, int);
 extern TTF_Font* init_font();
 extern void add_notification(const char *text, SDL_Color color);
+extern SDL_Rect get_game_leave_button_rect();
+extern void add_event_log(const char *text);
 
 // State
 typedef enum {
@@ -42,6 +44,7 @@ Lobby current_lobby;
 // Game State (shared with graphics.c)
 GameState current_state;
 GameState previous_state;  // Để theo dõi thay đổi
+Uint32 match_start_time = 0;  // Track match timer
 
 // Friends, Profile, Leaderboard Data
 FriendInfo friends_list[50];
@@ -139,6 +142,7 @@ void check_game_changes() {
             snprintf(msg, sizeof(msg), "%s has been defeated!", 
                     current_state.players[i].username);
             add_notification(msg, (SDL_Color){255, 68, 68, 255});
+            add_event_log(msg);
         }
         
         // Kiểm tra power-up
@@ -146,6 +150,7 @@ void check_game_changes() {
             if (i == my_player_id) { // Chỉ thông báo cho người chơi hiện tại
                 add_notification("Picked up BOMB power-up! +1 Bomb", 
                                (SDL_Color){255, 215, 0, 255});
+                add_event_log("Picked up BOMB power-up");
             }
         }
         
@@ -153,6 +158,7 @@ void check_game_changes() {
             if (i == my_player_id) {
                 add_notification("Picked up FIRE power-up! +1 Blast Range", 
                                (SDL_Color){255, 69, 0, 255});
+                add_event_log("Picked up FIRE power-up");
             }
         }
     }
@@ -246,6 +252,7 @@ void process_server_packet(ServerPacket *pkt) {
                     add_notification("Game đã bắt đầu!", (SDL_Color){0, 255, 0, 255});
                 }
                 current_screen = SCREEN_GAME;
+                match_start_time = SDL_GetTicks();
                 memset(&current_state, 0, sizeof(GameState));
                 memset(&previous_state, 0, sizeof(GameState));
                 lobby_error_message[0] = '\0';
@@ -259,6 +266,15 @@ void process_server_packet(ServerPacket *pkt) {
             check_game_changes();
             
             if (current_state.game_status == GAME_ENDED) {
+                // Log end state
+                if (current_state.winner_id >= 0) {
+                    char end_msg[128];
+                    snprintf(end_msg, sizeof(end_msg), "Match ended. Winner: %s", current_state.players[current_state.winner_id].username);
+                    add_event_log(end_msg);
+                } else {
+                    add_event_log("Match ended. Draw.");
+                }
+
                 printf("\n╔═══════════════════════╗\n");
                 printf("║      GAME ENDED!           ║\n");
                 if (current_state.winner_id >= 0) {
@@ -767,7 +783,28 @@ inp_access_code.is_active = is_mouse_inside(inp_access_code.rect, mx, my);
                     break;
                     
                 case SCREEN_GAME:
+                    if (e.type == SDL_MOUSEBUTTONDOWN) {
+                        SDL_Rect leave_btn = get_game_leave_button_rect();
+                        if (is_mouse_inside(leave_btn, mx, my)) {
+                            send_packet(MSG_LEAVE_GAME, 0);
+                            current_screen = SCREEN_LOBBY_LIST;
+                            send_packet(MSG_LIST_LOBBIES, 0);
+                            lobby_error_message[0] = '\0';
+                            my_player_id = -1;
+                            break;
+                        }
+                    }
+
                     if (e.type == SDL_KEYDOWN) {
+                        if (e.key.keysym.sym == SDLK_ESCAPE) {
+                            send_packet(MSG_LEAVE_GAME, 0);
+                            current_screen = SCREEN_LOBBY_LIST;
+                            send_packet(MSG_LIST_LOBBIES, 0);
+                            lobby_error_message[0] = '\0';
+                            my_player_id = -1;
+                            break;
+                        }
+
                         ClientPacket pkt;
                         memset(&pkt, 0, sizeof(pkt));
                         pkt.type = MSG_MOVE;

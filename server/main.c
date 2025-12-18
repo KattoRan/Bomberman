@@ -50,6 +50,19 @@ void send_response(int socket_fd, ServerPacket *packet) {
     send(socket_fd, packet, sizeof(ServerPacket), 0);
 }
 
+// Broadcast full lobby list to all authenticated clients
+void broadcast_lobby_list() {
+    ServerPacket packet;
+    packet.type = MSG_LOBBY_LIST;
+    packet.payload.lobby_list.count = get_lobby_list(packet.payload.lobby_list.lobbies);
+
+    for (int i = 0; i < num_clients; i++) {
+        if (clients[i].is_authenticated) {
+            send_response(clients[i].socket_fd, &packet);
+        }
+    }
+}
+
 void broadcast_lobby_update(int lobby_id) {
     Lobby *lobby = find_lobby(lobby_id);
     if (!lobby) return;
@@ -83,6 +96,43 @@ long long get_current_time_ms() {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return ts.tv_sec * 1000LL + ts.tv_nsec / 1000000LL;
+}
+
+// Mark a player as forfeited during an active game, and end game if only one remains
+void forfeit_player_from_game(int lobby_id, const char *username) {
+    Lobby *lb = find_lobby(lobby_id);
+    if (!lb || lb->status != LOBBY_PLAYING) return;
+
+    GameState *gs = &active_games[lobby_id];
+    int p_idx = -1;
+    for (int i = 0; i < gs->num_players; i++) {
+        if (strcmp(gs->players[i].username, username) == 0) {
+            p_idx = i;
+            break;
+        }
+    }
+
+    if (p_idx != -1) {
+        gs->players[p_idx].is_alive = 0;
+        printf("[GAME] %s forfeited in lobby %d\n", username, lobby_id);
+    }
+
+    // Check if game should end after forfeit
+    int alive = 0;
+    int last_alive = -1;
+    for (int i = 0; i < gs->num_players; i++) {
+        if (gs->players[i].is_alive) {
+            alive++;
+            last_alive = i;
+        }
+    }
+
+    if (gs->game_status == GAME_RUNNING && alive <= 1) {
+        gs->game_status = GAME_ENDED;
+        gs->winner_id = (alive == 1) ? last_alive : -1;
+    }
+
+    broadcast_game_state(lobby_id);
 }
 
 // --- Packet Handling ---
@@ -195,6 +245,9 @@ void handle_client_packet(int socket_fd, ClientPacket *pkt) {
                 if (pkt->is_private) {
                     printf("[LOBBY] Private room created with code: %s\n", pkt->access_code);
                 }
+
+                // Notify everyone to refresh lobby list
+                broadcast_lobby_list();
             }
             break;
 
@@ -205,6 +258,7 @@ void handle_client_packet(int socket_fd, ClientPacket *pkt) {
             if (join_res == 0) {
                 client->lobby_id = pkt->lobby_id;
                 broadcast_lobby_update(pkt->lobby_id);
+                broadcast_lobby_list(); // keep lobby list in sync for others
             } else {
                 response.type = MSG_ERROR;
                 response.code = join_res;
@@ -228,6 +282,7 @@ void handle_client_packet(int socket_fd, ClientPacket *pkt) {
                 leave_lobby(old_lid, client->username);
                 client->lobby_id = -1;
                 broadcast_lobby_update(old_lid);
+                broadcast_lobby_list();
                 
                 response.type = MSG_LOBBY_LIST;
                 response.payload.lobby_list.count = get_lobby_list(response.payload.lobby_list.lobbies);
@@ -239,6 +294,20 @@ void handle_client_packet(int socket_fd, ClientPacket *pkt) {
             response.type = MSG_LOBBY_LIST;
             response.payload.lobby_list.count = get_lobby_list(response.payload.lobby_list.lobbies);
             send_response(socket_fd, &response);
+            break;
+
+        case MSG_LEAVE_GAME:
+            if (client->lobby_id != -1) {
+                int lid = client->lobby_id;
+                forfeit_player_from_game(lid, client->username);
+                leave_lobby(lid, client->username);
+                client->lobby_id = -1;
+                broadcast_lobby_list();
+
+                response.type = MSG_LOBBY_LIST;
+                response.payload.lobby_list.count = get_lobby_list(response.payload.lobby_list.lobbies);
+                send_response(socket_fd, &response);
+            }
             break;
 
         case MSG_READY:
@@ -523,10 +592,13 @@ int main() {
                     // Client disconnected
                     printf("[DISCONNECT] Client %d (%s)\n", sd, 
                            clients[i].username[0] ? clients[i].username : "unknown");
-                    
+
                     if (clients[i].lobby_id != -1) {
+                         // If leaving during a game, mark forfeit
+                         forfeit_player_from_game(clients[i].lobby_id, clients[i].username);
                          leave_lobby(clients[i].lobby_id, clients[i].username);
                          broadcast_lobby_update(clients[i].lobby_id);
+                         broadcast_lobby_list();
                     }
                     // No longer using logout_user() since it doesn't exist
                     // Database tracks online status differently now
