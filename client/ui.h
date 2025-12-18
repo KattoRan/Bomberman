@@ -53,6 +53,7 @@ void render_lobby_room_screen(SDL_Renderer *renderer, TTF_Font *font,
 void render_friends_screen(SDL_Renderer *renderer, TTF_Font *font,
                            FriendInfo *friends, int friend_count,
                            FriendInfo *pending, int pending_count,
+                           FriendInfo *sent, int sent_count,
                            Button *back_btn);
 
 void render_profile_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Font *font_small,
@@ -66,5 +67,12 @@ void render_leaderboard_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF
 void render_create_room_dialog(SDL_Renderer *renderer, TTF_Font *font,
                                InputField *room_name, InputField *access_code,
                                Button *create_btn, Button *cancel_btn);
+
+void render_settings_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Font *font_small,
+                            int active_tab, Button *back_btn, Button *apply_btn);
+
+void render_post_match_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Font *font_small,
+                              int winner_id, int *elo_changes, int *kills, int duration_seconds,
+                              Button *rematch_btn, Button *lobby_btn, GameState *game_state);
 
 #endif

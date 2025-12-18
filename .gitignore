@@ -1,1 +1,6 @@
 .kiro/
+*.bin
+*.o
+*.md
+*.db
+*.log

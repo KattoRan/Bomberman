@@ -145,15 +145,35 @@ void handle_client_packet(int socket_fd, ClientPacket *pkt) {
     // Logic xử lý System Input
     switch (pkt->type) {
         case MSG_REGISTER:
-            response.type = MSG_AUTH_RESPONSE;
-            response.code = db_register_user(pkt->username, pkt->email, pkt->password);
-            if (response.code == AUTH_SUCCESS) {
-                strcpy(response.message, "Registration successful");
-                printf("[AUTH] Registration: %s (email: %s)\n", pkt->username, pkt->email);
-            } else {
-                strcpy(response.message, "Registration failed");
+            {
+                response.type = MSG_AUTH_RESPONSE;
+                response.code = db_register_user(pkt->username, pkt->email, pkt->password);
+                if (response.code == AUTH_SUCCESS) {
+                    // Auto-login after successful registration
+                    User user;
+                    if (db_login_user(pkt->username, pkt->password, &user) == AUTH_SUCCESS) {
+                        client->user_id = user.id;
+                        strncpy(client->username, user.username, MAX_USERNAME - 1);
+                        strncpy(client->display_name, user.display_name, MAX_DISPLAY_NAME - 1);
+                        client->is_authenticated = 1;
+                        
+                        // Send back user info
+                        response.payload.auth.user_id = user.id;
+                        strncpy(response.payload.auth.username, user.username, MAX_USERNAME - 1);
+                        strncpy(response.payload.auth.display_name, user.display_name, MAX_DISPLAY_NAME - 1);
+                        response.payload.auth.elo_rating = user.elo_rating;
+                        strcpy(response.message, "Registration successful - welcome!");
+                        
+                        printf("[AUTH] Registration + Auto-login: %s (ID: %d, ELO: %d)\n", 
+                               user.username, user.id, user.elo_rating);
+                    } else {
+                        strcpy(response.message, "Registration successful");
+                    }
+                } else {
+                    strcpy(response.message, "Registration failed");
+                }
+                send_response(socket_fd, &response);
             }
-            send_response(socket_fd, &response);
             break;
             
         case MSG_LOGIN:
@@ -556,102 +576,104 @@ int main() {
                     // Update game logic (bombs, explosions, deaths)
                     update_game(&active_games[i]);
                     
-                    // Broadcast state to all players
+                    // Check if game just ended and calculate ELO BEFORE broadcasting
+                    if (active_games[i].game_status == GAME_ENDED) {
+                        GameState *gs = &active_games[i];
+                        
+                        // Only calculate ELO once (check if not already calculated)
+                        int already_calculated = 0;
+                        for (int p = 0; p < gs->num_players; p++) {
+                            if (gs->elo_changes[p] != 0) {
+                                already_calculated = 1;
+                                break;
+                            }
+                        }
+                        
+                        if (!already_calculated) {
+                            printf("[GAME] Lobby %d ended. Winner: %d\n", 
+                                   i, gs->winner_id);
+                            
+                            // Prepare data for stats recording
+                            int player_ids[MAX_CLIENTS];
+                            int placements[MAX_CLIENTS];
+                            int kills[MAX_CLIENTS];
+                            
+                            // Get actual player IDs and populate kills
+                            for (int p = 0; p < gs->num_players; p++) {
+                                // Find user_id by username
+                                int found_user_id = -1;
+                                for (int k = 0; k < num_clients; k++) {
+                                    if (clients[k].is_authenticated && 
+                                        strcmp(clients[k].username, gs->players[p].username) == 0) {
+                                        found_user_id = clients[k].user_id;
+                                        break;
+                                    }
+                                }
+                                
+                                player_ids[p] = found_user_id;
+                                placements[p] = (p == gs->winner_id) ? 1 : 2;
+                                kills[p] = gs->kills[p];
+                                
+                                printf("[ELO] Player %s (user_id: %d) -> Placement: %d, Kills: %d\n", 
+                                       gs->players[p].username, player_ids[p], placements[p], kills[p]);
+                            }
+                            
+                            // Update ELO ratings and get changes BEFORE broadcasting
+                            int elo_changes_temp[MAX_CLIENTS] = {0};
+                            if (elo_update_after_match(player_ids, placements, gs->num_players, elo_changes_temp) == 0) {
+                                printf("[ELO] Successfully updated ELO ratings\n");
+                                
+                                // Store ELO changes in game state for client display
+                                printf("[ELO] Storing ELO changes in game state:\n");
+                                for (int p = 0; p < gs->num_players; p++) {
+                                    gs->elo_changes[p] = elo_changes_temp[p];
+                                    printf("[ELO]   Player %d: elo_changes[%d] = %d\n", p, p, gs->elo_changes[p]);
+                                }
+                            } else {
+                                printf("[ELO] ERROR: Failed to update ELO ratings\n");
+                            }
+                            
+                            // Record match statistics with actual duration
+                            int duration_seconds = gs->match_duration_seconds;
+                            int match_id = stats_record_match(player_ids, placements, kills, 
+                                                             gs->num_players, gs->winner_id, 
+                                                             duration_seconds);
+                            
+                            if (match_id >= 0) {
+                                printf("[STATS] Match recorded with ID: %d (Duration: %d seconds)\n", 
+                                       match_id, duration_seconds);
+                            } else {
+                                printf("[STATS] ERROR: Failed to record match\n");
+                            }
+                            
+                            // Send notification to players about ELO changes
+                            for (int j = 0; j < num_clients; j++) {
+                                if (clients[j].lobby_id == i && clients[j].is_authenticated) {
+                                    ServerPacket notif;
+                                    memset(&notif, 0, sizeof(ServerPacket));
+                                    notif.type = MSG_NOTIFICATION;
+                                    notif.code = 0;
+                                    
+                                    if (gs->winner_id >= 0 && 
+                                        strcmp(clients[j].username, gs->players[gs->winner_id].username) == 0) {
+                                        sprintf(notif.message, "Victory! ELO updated.");
+                                    } else {
+                                        sprintf(notif.message, "Match ended. ELO updated.");
+                                    }
+                                    
+                                    send_response(clients[j].socket_fd, &notif);
+                                }
+                            }
+                            
+                            lb->status = LOBBY_WAITING;
+                        }
+                    }
+                    
+                    // Broadcast state to all players (NOW with ELO changes populated!)
                     broadcast_game_state(i);
                     
                     // Update timer
                     last_game_update[i] = now;
-
-                    // Check game over
-                    if (active_games[i].game_status == GAME_ENDED) {
-                        printf("[GAME] Lobby %d ended. Winner: %d\n", 
-                               i, active_games[i].winner_id);
-                        
-                        // === NEW: ELO AND STATS CALCULATION ===
-                        GameState *gs = &active_games[i];
-                        int player_ids[MAX_CLIENTS];
-                        int placements[MAX_CLIENTS];
-                        int kills[MAX_CLIENTS] = {0};  // TODO: Track kills during gameplay
-                        
-                        // Map player usernames to user_ids
-                        for (int j = 0; j < gs->num_players; j++) {
-                            // Find the client with this username
-                            int found_user_id = -1;
-                            for (int k = 0; k < num_clients; k++) {
-                                if (clients[k].is_authenticated && 
-                                    strcmp(clients[k].username, gs->players[j].username) == 0) {
-                                    found_user_id = clients[k].user_id;
-                                    break;
-                                }
-                            }
-                            
-                            player_ids[j] = found_user_id;
-                            
-                            // Determine placement: winner = 1, others = 2
-                            if (j == gs->winner_id) {
-                                placements[j] = 1;  // Winner
-                            } else {
-                                placements[j] = 2;  // Loser
-                            }
-                            
-                            printf("[ELO] Player %s (user_id: %d) -> Placement: %d\n", 
-                                   gs->players[j].username, player_ids[j], placements[j]);
-                        }
-                        
-                        // Calculate match duration (for now, use 0 as placeholder)
-                        int duration_seconds = 0;  // TODO: Track actual match duration
-                        
-                        // Update ELO ratings
-                        if (elo_update_after_match(player_ids, placements, gs->num_players) == 0) {
-                            printf("[ELO] Successfully updated ELO ratings\n");
-                        } else {
-                            printf("[ELO] ERROR: Failed to update ELO ratings\n");
-                        }
-                        
-                        // Record match statistics
-                        int match_id = stats_record_match(player_ids, placements, kills, 
-                                                         gs->num_players, gs->winner_id, 
-                                                         duration_seconds);
-                        if (match_id >= 0) {
-                            printf("[STATS] Match recorded with ID: %d\n", match_id);
-                        } else {
-                            printf("[STATS] ERROR: Failed to record match\n");
-                        }
-                        
-                        // Send notification to players about ELO changes
-                        for (int j = 0; j < num_clients; j++) {
-                            if (clients[j].lobby_id == i && clients[j].is_authenticated) {
-                                ServerPacket notif;
-                                memset(&notif, 0, sizeof(ServerPacket));
-                                notif.type = MSG_NOTIFICATION;
-                                notif.code = 0;
-                                
-                                if (gs->winner_id >= 0 && 
-                                    strcmp(clients[j].username, gs->players[gs->winner_id].username) == 0) {
-                                    sprintf(notif.message, "Victory! ELO updated.");
-                                } else {
-                                    sprintf(notif.message, "Match ended. ELO updated.");
-                                }
-                                
-                                send_response(clients[j].socket_fd, &notif);
-                            }
-                        }
-                        // === END ELO AND STATS ===
-                        
-                        lb->status = LOBBY_WAITING;
-                        
-                        // Reset all players to not ready
-                        for (int j = 0; j < lb->num_players; j++) {
-                            if (j != lb->host_id) {
-                                lb->players[j].is_ready = 0;
-                            }
-                        }
-                        
-                        broadcast_lobby_update(i);
-                        
-                        // Broadcast final game state
-                        broadcast_game_state(i);
-                    }
                 }
             }
         }

@@ -155,6 +155,10 @@ typedef struct {
     int num_players;
     int game_status;
     int winner_id;
+    int kills[MAX_CLIENTS];  // Kill count per player this match
+    int elo_changes[MAX_CLIENTS];  // ELO change for each player (+/-)
+    long long match_start_time;  // Unix timestamp when match started
+    int match_duration_seconds;  // Match duration in seconds
     long long end_game_time;
 } GameState;
 

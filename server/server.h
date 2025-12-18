@@ -58,8 +58,8 @@ int friend_get_sent_requests(int user_id, FriendInfo *out_requests, int max_coun
 
 // --- ELO System Functions ---
 int get_k_factor(int matches_played);
-int calculate_elo_change(int player_rating, int avg_opponent_rating, int placement, int matches_played);
-int elo_update_after_match(int *player_ids, int *placements, int num_players);
+int elo_calculate_change(int my_elo, int opp_elo, int win);
+int elo_update_after_match(int *player_ids, int *placements, int num_players, int *out_elo_changes);
 int get_tier(int elo_rating);
 const char* get_tier_name(int tier);
 

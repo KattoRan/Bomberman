@@ -100,6 +100,16 @@ void init_game(GameState *state, Lobby *lobby) {
     state->winner_id = -1;
     state->end_game_time = 0;
     
+    // Initialize timer
+    state->match_start_time = time(NULL);  // Record start time
+    state->match_duration_seconds = 0;
+    
+    // Initialize kill tracking
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        state->kills[i] = 0;
+        state->elo_changes[i] = 0;  // Initialize ELO changes
+    }
+    
     printf("[GAME] Initialized with %d players\n", state->num_players);
 }
 
@@ -147,9 +157,8 @@ int pickup_powerup(GameState *state, Player *p, int x, int y) {
             break;
             
         case POWERUP_SPEED:
-            // TODO: Implement speed in Player struct
-            // For now, just acknowledge pickup
-            printf("[GAME] Player %s picked up SPEED power-up! (Speed boost not yet implemented)\n", 
+            // Speed power-up not implemented
+            printf("[GAME] Player %s picked up SPEED power-up! (Speed boost not implemented)\n", 
                    p->username);
             state->map[y][x] = EMPTY;
             return 1;  // Picked up
@@ -312,6 +321,50 @@ void update_game(GameState *state) {
                 state->map[y][x] = EMPTY;
             }
             explosions[i].is_active = 0;
+
+            // Check if any player is hit by this explosion tile
+            for (int p = 0; p < state->num_players; p++) {
+                if (state->players[p].is_alive &&
+                    state->players[p].x == x && state->players[p].y == y) {
+                    
+                    state->players[p].is_alive = 0;
+                    
+                    // Try to find which bomb caused this explosion
+                    // Since we don't track explosion source, check recently detonated bombs
+                    int killer_id = -1;
+                    
+                    // Look for a bomb that detonated recently at a position that could reach this explosion
+                    for (int b = 0; b < MAX_BOMBS; b++) {
+                        if (!bombs[b].is_active) { // Check inactive bombs (recently exploded)
+                            // Check if this bomb could have caused explosion at (x, y)
+                            int dist_x = abs(bombs[b].x - x);
+                            int dist_y = abs(bombs[b].y - y);
+                            
+                            // If explosion is in line with bomb and within range
+                            if ((dist_x == 0 && dist_y <= bombs[b].range) ||
+                                (dist_y == 0 && dist_x <= bombs[b].range)) {
+                                killer_id = bombs[b].owner_id;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // Attribute kill (don't count suicide)
+                    if (killer_id >= 0 && killer_id != p && killer_id < state->num_players) {
+                        state->kills[killer_id]++;
+                        printf("[GAME] Player %s killed %s! (Total kills: %d)\n",
+                               state->players[killer_id].username,
+                               state->players[p].username,
+                               state->kills[killer_id]);
+                    } else if (killer_id == p) {
+                        printf("[GAME] Player %s died from own bomb (suicide)\n",
+                               state->players[p].username);
+                    } else {
+                        printf("[GAME] Player %s died at (%d,%d)! (killer unknown)\n",
+                               state->players[p].username, x, y);
+                    }
+                }
+            }
         }
     }
     
@@ -320,13 +373,10 @@ void update_game(GameState *state) {
     for (int i = 0; i < state->num_players; i++) {
         Player *p = &state->players[i];
         if (p->is_alive) {
-            if (state->map[p->y][p->x] == EXPLOSION) {
-                p->is_alive = 0;
-                printf("[GAME] Player %s died at (%d,%d)!\n", p->username, p->x, p->y);
-            } else {
-                alive++;
-                last_alive = i;
-            }
+            // The player death check is now handled when explosions are cleared
+            // This block only counts alive players for game end condition
+            alive++;
+            last_alive = i;
         }
     }
     
@@ -334,11 +384,16 @@ void update_game(GameState *state) {
         state->game_status = GAME_ENDED;
         state->winner_id = (alive == 1) ? last_alive : -1;
         
+        // Calculate match duration
+        long long end_time = time(NULL);
+        state->match_duration_seconds = (int)(end_time - state->match_start_time);
+        
         if (state->winner_id >= 0) {
-            printf("[GAME] Game ended. Winner: %s\n", 
-                   state->players[state->winner_id].username);
+            printf("[GAME] Game ended. Winner: %s (Duration: %d seconds)\n", 
+                   state->players[state->winner_id].username, state->match_duration_seconds);
         } else {
-            printf("[GAME] Game ended. Draw!\n");
+            printf("[GAME] Game ended. Draw! (Duration: %d seconds)\n", 
+                   state->match_duration_seconds);
         }
     }
 }
