@@ -13,7 +13,9 @@
 // --- Structures & Globals ---
 typedef struct {
     int socket_fd;
+    int user_id;                      // Database user ID
     char username[MAX_USERNAME];
+    char display_name[MAX_DISPLAY_NAME];
     int is_authenticated;
     int lobby_id;
     int player_id_in_game; 
@@ -21,6 +23,17 @@ typedef struct {
 
 ClientInfo clients[MAX_CLIENTS * MAX_LOBBIES];
 int num_clients = 0;
+
+// Helper function to check if a user is online
+int is_user_online(int user_id) {
+    for (int i = 0; i < num_clients; i++) {
+        if (clients[i].is_authenticated && clients[i].user_id == user_id) {
+            return 1;  // Online
+        }
+    }
+    return 0;  // Offline
+}
+
 GameState active_games[MAX_LOBBIES];
 
 // --- THÊM: Tracking game update timing ---
@@ -97,8 +110,26 @@ void handle_client_packet(int socket_fd, ClientPacket *pkt) {
                 }
 
                 if (p_id != -1) {
+                    ServerPacket notif;
+                    memset(&notif, 0, sizeof(ServerPacket));
+                    
                     if (pkt->type == MSG_MOVE) {
-                        handle_move(gs, p_id, pkt->data);
+                        int move_result = handle_move(gs, p_id, pkt->data);
+                        
+                        // Check if power-up was involved
+                        if (move_result == 11) {
+                            // Picked up power-up
+                            notif.type = MSG_NOTIFICATION;
+                            notif.code = 0;
+                            sprintf(notif.message, "Power-up collected!");
+                            send_response(client->socket_fd, &notif);
+                        } else if (move_result == 12) {
+                            // Already at max
+                            notif.type = MSG_NOTIFICATION;
+                            notif.code = 1;
+                            sprintf(notif.message, "Already at maximum capacity!");
+                            send_response(client->socket_fd, &notif);
+                        }
                     } else if (pkt->type == MSG_PLANT_BOMB) {
                         plant_bomb(gs, p_id);
                     }
@@ -115,45 +146,78 @@ void handle_client_packet(int socket_fd, ClientPacket *pkt) {
     switch (pkt->type) {
         case MSG_REGISTER:
             response.type = MSG_AUTH_RESPONSE;
-            response.code = register_user(pkt->username, pkt->password);
-            strcpy(response.message, (response.code == AUTH_SUCCESS) ? "Success" : "Failed");
+            response.code = db_register_user(pkt->username, pkt->email, pkt->password);
+            if (response.code == AUTH_SUCCESS) {
+                strcpy(response.message, "Registration successful");
+                printf("[AUTH] Registration: %s (email: %s)\n", pkt->username, pkt->email);
+            } else {
+                strcpy(response.message, "Registration failed");
+            }
             send_response(socket_fd, &response);
             break;
             
         case MSG_LOGIN:
-            response.type = MSG_AUTH_RESPONSE;
-            response.code = login_user(pkt->username, pkt->password);
-            if (response.code == AUTH_SUCCESS) {
-                strncpy(client->username, pkt->username, MAX_USERNAME);
-                client->is_authenticated = 1;
-                strcpy(response.message, "Login successful");
-            } else {
-                strcpy(response.message, "Invalid credentials");
+            {
+                User user;
+                response.type = MSG_AUTH_RESPONSE;
+                response.code = db_login_user(pkt->username, pkt->password, &user);
+                if (response.code == AUTH_SUCCESS) {
+                    client->user_id = user.id;
+                    strncpy(client->username, user.username, MAX_USERNAME - 1);
+                    strncpy(client->display_name, user.display_name, MAX_DISPLAY_NAME - 1);
+                    client->is_authenticated = 1;
+                    
+                    // Send back user info
+                    response.payload.auth.user_id = user.id;
+                    strncpy(response.payload.auth.username, user.username, MAX_USERNAME - 1);
+                    strncpy(response.payload.auth.display_name, user.display_name, MAX_DISPLAY_NAME - 1);
+                    response.payload.auth.elo_rating = user.elo_rating;
+                    strcpy(response.message, "Login successful");
+                    
+                    printf("[AUTH] Login: %s (ID: %d, ELO: %d)\n", 
+                           user.username, user.id, user.elo_rating);
+                } else {
+                    strcpy(response.message, "Invalid credentials");
+                }
+                send_response(socket_fd, &response);
             }
-            send_response(socket_fd, &response);
             break;
 
         case MSG_CREATE_LOBBY:
             if (!client->is_authenticated) break;
-            int lid = create_lobby(pkt->room_name, client->username);
+            int lid = create_lobby(pkt->room_name, client->username, pkt->is_private, pkt->access_code);
             if (lid >= 0) {
                 client->lobby_id = lid;
                 response.type = MSG_LOBBY_UPDATE;
                 response.payload.lobby = *find_lobby(lid);
                 send_response(socket_fd, &response);
+                
+                if (pkt->is_private) {
+                    printf("[LOBBY] Private room created with code: %s\n", pkt->access_code);
+                }
             }
             break;
 
         case MSG_JOIN_LOBBY:
             if (!client->is_authenticated) break;
-            int join_res = join_lobby(pkt->lobby_id, client->username);
+            // Use join_lobby_with_code to support private rooms
+            int join_res = join_lobby_with_code(pkt->lobby_id, client->username, pkt->access_code);
             if (join_res == 0) {
                 client->lobby_id = pkt->lobby_id;
                 broadcast_lobby_update(pkt->lobby_id);
             } else {
                 response.type = MSG_ERROR;
                 response.code = join_res;
-                strcpy(response.message, "Cannot join lobby");
+                // Better error messages
+                if (join_res == ERR_LOBBY_WRONG_ACCESS_CODE) {
+                    strcpy(response.message, "Wrong access code");
+                } else if (join_res == ERR_LOBBY_LOCKED) {
+                    strcpy(response.message, "Room is locked");
+                } else if (join_res == ERR_LOBBY_GAME_IN_PROGRESS) {
+                    strcpy(response.message, "Game in progress");
+                } else {
+                    strcpy(response.message, "Cannot join lobby");
+                }
                 send_response(socket_fd, &response);
             }
             break;
@@ -199,6 +263,185 @@ void handle_client_packet(int socket_fd, ClientPacket *pkt) {
                 }
             }
             break;
+            
+        case MSG_FRIEND_REQUEST:
+            if (!client->is_authenticated) break;
+            {
+                int result = friend_send_request(client->user_id, pkt->target_display_name);
+                response.type = MSG_NOTIFICATION;
+                response.code = result;
+                if (result == 0) {
+                    snprintf(response.message, sizeof(response.message), 
+                             "Friend request sent to %s", pkt->target_display_name);
+                } else {
+                    strcpy(response.message, "Friend request failed");
+                }
+               send_response(socket_fd, &response);
+            break;
+        }    
+        
+        case MSG_FRIEND_LIST: {
+            if (!client->is_authenticated) break;
+            response.type = MSG_FRIEND_LIST_RESPONSE;
+            
+            // Get accepted friends
+            int friend_count = friend_get_list(client->user_id, 
+                                              response.payload.friend_list.friends, 50);
+            response.payload.friend_list.count = friend_count;
+            
+            // Get pending requests (incoming)
+            FriendInfo pending[50];
+            int pending_count = friend_get_pending_requests(client->user_id, pending, 50);
+            
+            // Get sent requests (outgoing)
+            FriendInfo sent[50];
+            int sent_count = friend_get_sent_requests(client->user_id, sent, 50);
+            
+            // Append pending to the friends array if there's space
+            if (friend_count + pending_count + sent_count <= 50) {
+                memcpy(&response.payload.friend_list.friends[friend_count], 
+                       pending, sizeof(FriendInfo) * pending_count);
+                memcpy(&response.payload.friend_list.friends[friend_count + pending_count],
+                       sent, sizeof(FriendInfo) * sent_count);
+                response.payload.friend_list.count += pending_count + sent_count;
+            }
+            
+            // Use 'code' field: low byte = pending_count, high byte = sent_count
+            response.code = pending_count | (sent_count << 8);
+            
+            send_response(socket_fd, &response);
+            break;
+        }    
+        
+        case MSG_FRIEND_ACCEPT:
+            if (!client->is_authenticated) break;
+            {
+                int result = friend_accept_request(client->user_id, pkt->target_user_id);
+                response.type = MSG_NOTIFICATION;
+                response.code = result;
+                if (result == 0) {
+                    strcpy(response.message, "Friend request accepted");
+                } else {
+                    strcpy(response.message, "Failed to accept request");
+                }
+                send_response(socket_fd, &response);
+                
+                // Refresh friend list
+                if (result == 0) {
+                    response.type = MSG_FRIEND_LIST_RESPONSE;
+                    int friend_count = friend_get_list(client->user_id, 
+                                                      response.payload.friend_list.friends, 50);
+                    response.payload.friend_list.count = friend_count;
+                    
+                    FriendInfo pending[50];
+                    int pending_count = friend_get_pending_requests(client->user_id, pending, 50);
+                    
+                    if (friend_count + pending_count <= 50) {
+                        memcpy(&response.payload.friend_list.friends[friend_count], 
+                               pending, sizeof(FriendInfo) * pending_count);
+                        response.payload.friend_list.count += pending_count;
+                    }
+                    
+                    response.code = pending_count;
+                    send_response(socket_fd, &response);
+                }
+            }
+            break;
+            
+        case MSG_FRIEND_DECLINE:
+            if (!client->is_authenticated) break;
+            {
+                int result = friend_decline_request(client->user_id, pkt->target_user_id);
+                response.type = MSG_NOTIFICATION;
+                response.code = result;
+                if (result == 0) {
+                    strcpy(response.message, "Friend request declined");
+                } else {
+                    strcpy(response.message, "Failed to decline request");
+                }
+                send_response(socket_fd, &response);
+                
+                // Refresh friend list
+                if (result == 0) {
+                    response.type = MSG_FRIEND_LIST_RESPONSE;
+                    int friend_count = friend_get_list(client->user_id, 
+                                                      response.payload.friend_list.friends, 50);
+                    response.payload.friend_list.count = friend_count;
+                    
+                    FriendInfo pending[50];
+                    int pending_count = friend_get_pending_requests(client->user_id, pending, 50);
+                    
+                    if (friend_count + pending_count <= 50) {
+                        memcpy(&response.payload.friend_list.friends[friend_count], 
+                               pending, sizeof(FriendInfo) * pending_count);
+                        response.payload.friend_list.count += pending_count;
+                    }
+                    
+                    response.code = pending_count;
+                    send_response(socket_fd, &response);
+                }
+            }
+            break;
+        
+        case MSG_FRIEND_REMOVE:
+            if (!client->is_authenticated) break;
+            {
+                int result = friend_remove(client->user_id, pkt->target_user_id);
+                response.type = MSG_NOTIFICATION;
+                response.code = result;
+                if (result == 0) {
+                    strcpy(response.message, "Friend removed");
+                } else {
+                    strcpy(response.message, "Failed to remove friend");
+                }
+                send_response(socket_fd, &response);
+                
+                // Refresh friend list
+                if (result == 0) {
+                    response.type = MSG_FRIEND_LIST_RESPONSE;
+                    int friend_count = friend_get_list(client->user_id, 
+                                                      response.payload.friend_list.friends, 50);
+                    response.payload.friend_list.count = friend_count;
+                    
+                    FriendInfo pending[50];
+                    int pending_count = friend_get_pending_requests(client->user_id, pending, 50);
+                    
+                    if (friend_count + pending_count <= 50) {
+                        memcpy(&response.payload.friend_list.friends[friend_count], 
+                               pending, sizeof(FriendInfo) * pending_count);
+                        response.payload.friend_list.count += pending_count;
+                    }
+                    
+                    response.code = pending_count;
+                    send_response(socket_fd, &response);
+                }
+            }
+            break;
+        
+        case MSG_GET_PROFILE:
+            if (!client->is_authenticated) break;
+            {
+                response.type = MSG_PROFILE_RESPONSE;
+                int target_id = (pkt->data > 0) ? pkt->data : client->user_id;
+                if (stats_get_profile(target_id, &response.payload.profile) == 0) {
+                    response.code = 0;
+                } else {
+                    response.code = -1;
+                    strcpy(response.message, "Profile not found");
+                }
+                send_response(socket_fd, &response);
+            }
+            break;
+            
+        case MSG_GET_LEADERBOARD:
+            if (!client->is_authenticated) break;
+            {
+                response.type = MSG_LEADERBOARD_RESPONSE;
+                response.payload.leaderboard.count = 
+                    stats_get_leaderboard(response.payload.leaderboard.entries, 100);
+                send_response(socket_fd, &response);
+            }
+            break;
     }
 }
 
@@ -206,11 +449,19 @@ void handle_client_packet(int socket_fd, ClientPacket *pkt) {
 
 int main() {
     printf("╔════════════════════════════════════╗\n");
-    printf("║  Bomberman Realtime Server v3.0   ║\n");
+    printf("║  Bomberman Server v4.0 (SQLite3)  ║\n");
     printf("║  Game tick rate: 20 Hz (50ms)     ║\n");
     printf("╚════════════════════════════════════╝\n\n");
     
-    load_users();
+    // Initialize SQLite database
+    if (db_init() != 0) {
+        fprintf(stderr, "Failed to initialize database\n");
+        return 1;
+    }
+    
+    // Initialize random number generator ONCE at startup
+    srand(time(NULL));
+    
     init_lobbies();
     int server_fd = init_server_socket();
     
@@ -277,9 +528,9 @@ int main() {
                          leave_lobby(clients[i].lobby_id, clients[i].username);
                          broadcast_lobby_update(clients[i].lobby_id);
                     }
-                    if (clients[i].is_authenticated) {
-                        logout_user(clients[i].username);
-                    }
+                    // No longer using logout_user() since it doesn't exist
+                    // Database tracks online status differently now
+                    
                     
                     close(sd);
                     clients[i] = clients[num_clients-1];
@@ -315,6 +566,77 @@ int main() {
                     if (active_games[i].game_status == GAME_ENDED) {
                         printf("[GAME] Lobby %d ended. Winner: %d\n", 
                                i, active_games[i].winner_id);
+                        
+                        // === NEW: ELO AND STATS CALCULATION ===
+                        GameState *gs = &active_games[i];
+                        int player_ids[MAX_CLIENTS];
+                        int placements[MAX_CLIENTS];
+                        int kills[MAX_CLIENTS] = {0};  // TODO: Track kills during gameplay
+                        
+                        // Map player usernames to user_ids
+                        for (int j = 0; j < gs->num_players; j++) {
+                            // Find the client with this username
+                            int found_user_id = -1;
+                            for (int k = 0; k < num_clients; k++) {
+                                if (clients[k].is_authenticated && 
+                                    strcmp(clients[k].username, gs->players[j].username) == 0) {
+                                    found_user_id = clients[k].user_id;
+                                    break;
+                                }
+                            }
+                            
+                            player_ids[j] = found_user_id;
+                            
+                            // Determine placement: winner = 1, others = 2
+                            if (j == gs->winner_id) {
+                                placements[j] = 1;  // Winner
+                            } else {
+                                placements[j] = 2;  // Loser
+                            }
+                            
+                            printf("[ELO] Player %s (user_id: %d) -> Placement: %d\n", 
+                                   gs->players[j].username, player_ids[j], placements[j]);
+                        }
+                        
+                        // Calculate match duration (for now, use 0 as placeholder)
+                        int duration_seconds = 0;  // TODO: Track actual match duration
+                        
+                        // Update ELO ratings
+                        if (elo_update_after_match(player_ids, placements, gs->num_players) == 0) {
+                            printf("[ELO] Successfully updated ELO ratings\n");
+                        } else {
+                            printf("[ELO] ERROR: Failed to update ELO ratings\n");
+                        }
+                        
+                        // Record match statistics
+                        int match_id = stats_record_match(player_ids, placements, kills, 
+                                                         gs->num_players, gs->winner_id, 
+                                                         duration_seconds);
+                        if (match_id >= 0) {
+                            printf("[STATS] Match recorded with ID: %d\n", match_id);
+                        } else {
+                            printf("[STATS] ERROR: Failed to record match\n");
+                        }
+                        
+                        // Send notification to players about ELO changes
+                        for (int j = 0; j < num_clients; j++) {
+                            if (clients[j].lobby_id == i && clients[j].is_authenticated) {
+                                ServerPacket notif;
+                                memset(&notif, 0, sizeof(ServerPacket));
+                                notif.type = MSG_NOTIFICATION;
+                                notif.code = 0;
+                                
+                                if (gs->winner_id >= 0 && 
+                                    strcmp(clients[j].username, gs->players[gs->winner_id].username) == 0) {
+                                    sprintf(notif.message, "Victory! ELO updated.");
+                                } else {
+                                    sprintf(notif.message, "Match ended. ELO updated.");
+                                }
+                                
+                                send_response(clients[j].socket_fd, &notif);
+                            }
+                        }
+                        // === END ELO AND STATS ===
                         
                         lb->status = LOBBY_WAITING;
                         

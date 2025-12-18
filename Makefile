@@ -6,7 +6,7 @@ SDL_CFLAGS = `sdl2-config --cflags`
 SDL_LIBS = `sdl2-config --libs` -lSDL2_image -lSDL2_ttf -lSDL2_mixer -lm
 
 # ---- DIRECTORIES ----
-CLIENT_SRC = $(wildcard client/*.c)
+CLIENT_SRC = client/graphics.c client/main.c client/ui_screens.c client/ui_new_screens.c
 SERVER_SRC = $(wildcard server/*.c)
 
 CLIENT_OBJ = $(CLIENT_SRC:.c=.o)
@@ -28,7 +28,7 @@ client/%.o: client/%.c
 
 # ---- SERVER BUILD ----
 $(SERVER_BIN): $(SERVER_OBJ)
-	$(CC) -o $@ $^
+	$(CC) -o $@ $^ -lsqlite3 -lm
 
 server/%.o: server/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
