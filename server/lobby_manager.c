@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "../common/protocol.h"
+#include "server.h"
 
 Lobby lobbies[MAX_LOBBIES];
 
@@ -24,7 +25,7 @@ Lobby* find_lobby(int lobby_id) {
 }
 
 // Create a new lobby
-int create_lobby(const char *room_name, const char *host_username, int is_private, const char *access_code) {
+int create_lobby(const char *room_name, const char *host_username, int is_private, const char *access_code, int game_mode) {
     int slot = -1;
     for (int i = 0; i < MAX_LOBBIES; i++) {
         if (lobbies[i].id == -1) {
@@ -47,6 +48,7 @@ int create_lobby(const char *room_name, const char *host_username, int is_privat
     lobby->status = LOBBY_WAITING;
     lobby->is_private = is_private;
     lobby->is_locked = 0;
+    lobby->game_mode = game_mode;  // Store game mode selection
     
     // Set access code for private rooms
     if (is_private && access_code) {
@@ -67,38 +69,50 @@ int create_lobby(const char *room_name, const char *host_username, int is_privat
     host->is_ready = 1;
     host->is_alive = 0;
     
-    printf("[LOBBY] Created: '%s' (ID:%d) by %s\n", 
-           room_name, lobby->id, host_username);
+    printf("[LOBBY] Created: '%s' (ID:%d, Mode:%d) by %s\n", 
+           room_name, lobby->id, game_mode, host_username);
     return lobby->id;
 }
 
 // Join an existing lobby with optional access code
 int join_lobby_with_code(int lobby_id, const char *username, const char *access_code) {
-    Lobby *lobby = find_lobby(lobby_id);
+    if (lobby_id < 0 || lobby_id >= MAX_LOBBIES || lobbies[lobby_id].id == -1) return ERR_LOBBY_NOT_FOUND; // Assuming id == -1 means inactive
+    Lobby *lobby = &lobbies[lobby_id];
     
-    if (!lobby) return ERR_LOBBY_NOT_FOUND;
+    // Check if the lobby is locked
+    if (lobby->is_locked) {
+        printf("[LOBBY] Cannot join lobby %d - room is locked\n", lobby_id);
+        return ERR_LOBBY_LOCKED;  // Error code for locked room
+    }
+    
+    // Check if room is full
     if (lobby->num_players >= MAX_CLIENTS) return ERR_LOBBY_FULL;
-    if (lobby->status != LOBBY_WAITING) return ERR_LOBBY_GAME_IN_PROGRESS; // Game in progress
-    if (lobby->is_locked) return ERR_LOBBY_LOCKED; // Room is locked
     
-    // Check access code for private rooms
+    // Check if private and code is required
     if (lobby->is_private) {
         if (!access_code || strcmp(lobby->access_code, access_code) != 0) {
-            printf("[LOBBY] Access denied to private room %d (wrong code)\n", lobby_id);
-            return ERR_LOBBY_WRONG_ACCESS_CODE; // Wrong access code
+            printf("[LOBBY] Invalid access code for private lobby %d\n", lobby_id);
+            return ERR_LOBBY_WRONG_ACCESS_CODE;  // Error code for wrong access code
         }
     }
     
-    Player *player = &lobby->players[lobby->num_players];
-    player->id = lobby->num_players;
-    strncpy(player->username, username, MAX_USERNAME - 1);
-    player->username[MAX_USERNAME - 1] = '\0';
-    player->is_ready = 0;
-    player->is_alive = 0;
+    // **NEW: Check if user is already in this lobby**
+    for (int i = 0; i < lobby->num_players; i++) {
+        if (strcmp(lobby->players[i].username, username) == 0) {
+            printf("[LOBBY] User %s already in lobby %d - rejecting duplicate join\n", username, lobby_id);
+            return ERR_LOBBY_DUPLICATE_USER;  // Error code for duplicate user
+        }
+    }
     
+    // Add player to lobby
+    Player *p = &lobby->players[lobby->num_players];
+    p->id = lobby->num_players; // Assign ID based on index
+    strncpy(p->username, username, MAX_USERNAME - 1);
+    p->username[MAX_USERNAME - 1] = '\0';
+    p->is_ready = 0;
+    p->is_alive = 0; // Initialize is_alive
     lobby->num_players++;
-    printf("[LOBBY] %s joined lobby %d (%d/%d)\n", 
-           username, lobby_id, lobby->num_players, MAX_CLIENTS);
+    printf("[LOBBY] %s joined lobby %d (%d/%d players)\n", username, lobby_id, lobby->num_players, MAX_CLIENTS);
     return 0;
 }
 

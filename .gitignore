@@ -3,6 +3,11 @@
 
 # Object files
 *.o
+*.bin
+*.o
+*.md
+*.db
+*.log
 
 # Executables
 *.exe

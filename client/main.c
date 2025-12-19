@@ -9,11 +9,9 @@
 #include "../common/protocol.h"
 #include "ui.h" 
 
-extern void render_game(SDL_Renderer*, TTF_Font*, int, int);
+extern void render_game(SDL_Renderer*, TTF_Font*, int, int, int);
 extern TTF_Font* init_font();
 extern void add_notification(const char *text, SDL_Color color);
-extern SDL_Rect get_game_leave_button_rect();
-extern void add_event_log(const char *text);
 
 // State
 typedef enum {
@@ -24,10 +22,13 @@ typedef enum {
     SCREEN_GAME,
     SCREEN_FRIENDS,
     SCREEN_PROFILE,
-    SCREEN_LEADERBOARD
+    SCREEN_LEADERBOARD,
+    SCREEN_SETTINGS,
+    SCREEN_POST_MATCH
 } ScreenState;
 
 ScreenState current_screen = SCREEN_LOGIN;
+
 int sock;
 int my_player_id = -1;
 char my_username[MAX_USERNAME];
@@ -57,48 +58,77 @@ ProfileData my_profile = {0};  // Initialize to zero
 LeaderboardEntry leaderboard[100];
 int leaderboard_count = 0;
 
-// UI Components
-InputField inp_user = {{350, 150, 300, 40}, "", "Username:", 0, 30};
-InputField inp_email = {{350, 220, 300, 40}, "", "Email:", 0, 127};
-InputField inp_pass = {{350, 290, 300, 40}, "", "Password:", 0, 30};
-Button btn_login = {{350, 380, 140, 50}, "Login", 0};
-Button btn_reg = {{510, 380, 140, 50}, "Register", 0};
+// UI Components - UPDATED SIZES AND POSITIONS
+// Login/Register inputs - centered, larger
+InputField inp_user = {{685, 350, 550, 65}, "", "Username:", 0, 30};
+InputField inp_email = {{685, 450, 550, 65}, "", "Email:", 0, 127};
+InputField inp_pass = {{685, 550, 550, 65}, "", "Password:", 0, 30};
+Button btn_login = {{760, 680, 180, 60}, "Login", 0};
+Button btn_reg = {{970, 680, 180, 60}, "Register", 0};
 
-Button btn_create = {{50, 500, 200, 50}, "Create Room", 0};
-Button btn_refresh = {{270, 500, 200, 50}, "Refresh", 0};
-Button btn_friends = {{490, 500, 150, 50}, "Friends", 0};
-Button btn_profile = {{650, 10, 70, 35}, "Profile", 0};
-Button btn_leaderboard = {{730, 10, 60, 35}, "Top", 0};
+// Lobby list buttons - BOTTOM CENTER, larger
+Button btn_create = {{500, 940, 280, 70}, "Create Room", 0};
+Button btn_refresh = {{820, 940, 280, 70}, "Refresh", 0};
+Button btn_friends = {{1140, 940, 280, 70}, "Friends", 0};
+Button btn_quick_play = {{1460, 940, 280, 70}, "Quick Play", 0};  // NEW
+Button btn_profile = {{1620, 20, 130, 55}, "Profile", 0};
+Button btn_leaderboard = {{1765, 20, 130, 55}, "Top", 0};
 
-Button btn_ready = {{50, 500, 200, 50}, "Ready", 0};
-Button btn_start = {{270, 500, 200, 50}, "Start Game", 0};
-Button btn_leave = {{490, 500, 200, 50}, "Leave", 0};
+// Lobby room buttons - RAISED for better positioning (Y: 940->910)
+Button btn_ready = {{540, 910, 280, 70}, "Ready", 0};
+Button btn_start = {{430, 910, 340, 70}, "Start Game", 0};
+Button btn_leave = {{860, 910, 280, 70}, "Leave", 0};
 
-// Room creation UI
-InputField inp_room_name = {{300, 200, 400, 40}, "", "Room Name:", 0, 63};
-InputField inp_access_code = {{300, 280, 400, 40}, "", "Access Code (6 digits, optional):", 0, 6};
+// Lobby room - host-only buttons
+Button btn_lock_room = {{1620, 100, 180, 50}, "Lock Room", 0};
+Button btn_chat = {{1620, 170, 180, 50}, "Chat", 0};
+// Kick buttons will be positioned per-player dynamically
+
+// Game mode selection
+int selected_game_mode = 0;  // 0=Classic, 1=Sudden Death, 2=Fog of War
+
+// Room creation UI - larger
+InputField inp_room_name = {{685, 380, 550, 60}, "", "Room Name:", 0, 63};
+InputField inp_access_code = {{685, 480, 450, 60}, "", "Access Code (6 digits, optional):", 0, 6};
 int show_create_room_dialog = 0;
 int creating_private_room = 0;
-Button btn_create_confirm = {{0, 0, 180, 50}, "Create", 0};
-Button btn_cancel = {{0, 0, 180, 50}, "Cancel", 0};
+Button btn_create_confirm = {{0, 0, 220, 60}, "Create", 0};
+Button btn_cancel = {{0, 0, 220, 60}, "Cancel", 0};
 
 // Notification system
 char notification_message[256] = "";
 Uint32 notification_time = 0;
 const int NOTIFICATION_DURATION = 3000; // 3 seconds
 
-// Access code prompt for joining private rooms
-InputField inp_join_code = {{300, 250, 400, 40}, "", "Enter 6-digit access code:", 0, 6};
+// Access code prompt for joining private rooms - larger
+InputField inp_join_code = {{685, 450, 550, 60}, "", "Enter 6-digit access code:", 0, 6};
 int show_join_code_dialog = 0;
 int selected_private_lobby_id = -1;
 
-// Friend request UI
-InputField inp_friend_request = {{50, 550, 300, 40}, "", "Enter display name...", 0, 31};
-Button btn_send_friend_request = {{370, 550, 150, 40}, "Send Request", 0};
+// Friend request UI - fixed spacing and button width
+InputField inp_friend_request = {{685, 870, 350, 60}, "", "Enter display name...", 0, 31};
+Button btn_send_friend_request = {{1060, 870, 220, 60}, "Send Request", 0};  // W: 200->220 to fit text
 
 // Delete friend confirmation
 int show_delete_confirm = 0;
 int delete_friend_index = -1;
+
+// Settings screen state
+int settings_active_tab = 0;  // 0=Graphics, 1=Controls, 2=Account
+Button btn_settings = {{20, 940, 200, 60}, "Settings", 0};
+Button btn_settings_apply = {{0, 0, 200, 60}, "Apply", 0};
+
+// Post-match screen state  
+int post_match_winner_id = -1;
+int post_match_elo_changes[4] = {0, 0, 0, 0};
+int post_match_kills[4] = {0, 0, 0, 0};
+int post_match_duration = 0;  // Match duration in seconds
+int post_match_shown = 0;  // Prevent showing multiple times
+Button btn_rematch = {{0, 0, 250, 60}, "Rematch", 0};
+Button btn_return_lobby = {{0, 0, 250, 60}, "Return", 0};
+
+// Game timer tracking
+Uint32 game_start_time = 0;  // SDL ticks when game started
 
 // --- Helper Functions ---
 
@@ -237,6 +267,7 @@ void process_server_packet(ServerPacket *pkt) {
             }
             last_lobby_id = current_lobby.id;
             
+            // Find my player ID
             my_player_id = -1;
             for (int i = 0; i < current_lobby.num_players; i++) {
                 if (strcmp(current_lobby.players[i].username, my_username) == 0) {
@@ -250,14 +281,17 @@ void process_server_packet(ServerPacket *pkt) {
             if (current_lobby.status == LOBBY_PLAYING) {
                 if (current_screen != SCREEN_GAME) {
                     add_notification("Game đã bắt đầu!", (SDL_Color){0, 255, 0, 255});
+                    game_start_time = SDL_GetTicks();  // Start the timer
                 }
                 current_screen = SCREEN_GAME;
-                match_start_time = SDL_GetTicks();
                 memset(&current_state, 0, sizeof(GameState));
                 memset(&previous_state, 0, sizeof(GameState));
                 lobby_error_message[0] = '\0';
             } else {
-                current_screen = SCREEN_LOBBY_ROOM;
+                // Don't switch to lobby room if showing post-match screen
+                if (current_screen != SCREEN_POST_MATCH) {
+                    current_screen = SCREEN_LOBBY_ROOM;
+                }
             }
             break;
 
@@ -296,8 +330,25 @@ void process_server_packet(ServerPacket *pkt) {
                 }
                 printf("╚═══════════════════════╝\n\n");
                 
-                SDL_Delay(3000);
-                current_screen = SCREEN_LOBBY_ROOM;
+                // Switch to post-match screen (only once)
+                if (current_screen == SCREEN_GAME && !post_match_shown) {
+                    current_screen = SCREEN_POST_MATCH;
+                    post_match_shown = 1;  // Mark as shown
+                    
+                    // Populate post-match data with REAL values
+                    post_match_winner_id = current_state.winner_id;
+                    post_match_duration = current_state.match_duration_seconds;
+                    printf("[CLIENT] Post-match data from server:\n");
+                    for (int i = 0; i < current_state.num_players && i < MAX_CLIENTS; i++) {
+                        post_match_elo_changes[i] = current_state.elo_changes[i];  // Real ELO changes!
+                        post_match_kills[i] = current_state.kills[i];  // Real kills!
+                        printf("[CLIENT]   Player %d: ELO change = %d, Kills = %d\n", 
+                               i, post_match_elo_changes[i], post_match_kills[i]);
+                    }
+                    printf("[CLIENT]   Match duration: %d seconds\n", post_match_duration);
+                    
+                    printf("[CLIENT] Switched to post-match screen\n");
+                }
             }
             break;
             
@@ -405,15 +456,15 @@ int main(int argc, char *argv[]) {
     
     printf("Connected to server!\n");
 
-    // 2. Setup SDL
+    // 2. Setup SDL - FULLSCREEN 1920x1080
     SDL_Init(SDL_INIT_VIDEO);
     TTF_Init();
     SDL_Window *win = SDL_CreateWindow("Bomberman", 
                                        SDL_WINDOWPOS_CENTERED, 
                                        SDL_WINDOWPOS_CENTERED, 
-                                       800, 600, 
+                                       1920, 1080, 
                                        SDL_WINDOW_SHOWN);
-    SDL_Renderer *rend = SDL_CreateRenderer(win, -1, 0);
+    SDL_Renderer *rend = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     if (!win) {
         fprintf(stderr, "SDL_CreateWindow failed: %s\n", SDL_GetError());
         return -1;
@@ -423,11 +474,13 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "SDL_CreateRenderer failed: %s\n", SDL_GetError());
         return -1;
     }
-    TTF_Font *font_large = TTF_OpenFont("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 48);
+    // LARGER FONTS for better readability
+    TTF_Font *font_large = TTF_OpenFont("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 64);
     if (!font_large) {
-        font_large = TTF_OpenFont("C:\\Windows\\Fonts\\arialbd.ttf", 48);
+        font_large = TTF_OpenFont("C:\\Windows\\Fonts\\arialbd.ttf", 64);
     }
     
+    // font_small now uses 26pt (updated in init_font)
     TTF_Font *font_small = init_font();
     
     if (!font_small) {
@@ -605,15 +658,26 @@ int main(int argc, char *argv[]) {
                             send_packet(MSG_GET_LEADERBOARD, 0);
                             current_screen = SCREEN_LEADERBOARD;
                         }
+                        if (is_mouse_inside(btn_quick_play.rect, mx, my)) {
+                            // Quick Play - show notification (backend not implemented)
+                            snprintf(notification_message, sizeof(notification_message),
+                                    "Quick Play matchmaking coming soon!");
+                            notification_time = SDL_GetTicks();
+                        }
+                        if (is_mouse_inside(btn_settings.rect, mx, my)) {
+                            // Open settings screen
+                            current_screen = SCREEN_SETTINGS;
+                            settings_active_tab = 0;  // Default to Graphics tab
+                        }
                         
-                        int win_w, win_h;
-                        SDL_GetRendererOutputSize(rend, &win_w, &win_h);
-                        int list_width = 700;
-                        int start_x = (win_w - list_width) / 2;
-                        int y = 100;
+                        // Lobby click detection - MUST MATCH ui_screens.c coordinates
+                        int list_width = 1056;  // Fixed width from ui_screens.c
+                        int start_x = 432;      // Centered: (1920-1056)/2
+                        int y = 162;            // Fixed from top (matches rendering)
+                        int card_height = 75;   // Card height from ui_screens.c
                         
                         for (int i = 0; i < lobby_count; i++) {
-                            SDL_Rect r = {start_x, y, list_width, 70};
+                            SDL_Rect r = {start_x, y, list_width, card_height};
                             if (is_mouse_inside(r, mx, my)) {
                                 // Check if private room
                                 if (lobby_list[i].is_private) {
@@ -621,7 +685,7 @@ int main(int argc, char *argv[]) {
                                     selected_private_lobby_id = lobby_list[i].id;
                                     show_join_code_dialog = 1;
                                     inp_join_code.text[0] = '\0';
-                                   inp_join_code.is_active = 1;
+                                    inp_join_code.is_active = 1;
                                 } else {
                                     // Join public room directly
                                     ClientPacket pkt;
@@ -634,7 +698,7 @@ int main(int argc, char *argv[]) {
                                 selected_lobby_idx = i;
                                 break;
                             }
-                            y += 85;
+                            y += 85;  // Card spacing (75 + 10)
                         }
                     }
                     
@@ -642,7 +706,29 @@ int main(int argc, char *argv[]) {
                     if (show_create_room_dialog) {
                         if (e.type == SDL_MOUSEBUTTONDOWN) {
                             inp_room_name.is_active = is_mouse_inside(inp_room_name.rect, mx, my);
-inp_access_code.is_active = is_mouse_inside(inp_access_code.rect, mx, my);
+ inp_access_code.is_active = is_mouse_inside(inp_access_code.rect, mx, my);
+                            
+                            // Game mode buttons - calculate positions from render_create_room_dialog
+                            int win_w, win_h;
+                            SDL_GetRendererOutputSize(rend, &win_w, &win_h);
+                            int dialog_w = 700;
+                            int dialog_h = 650;
+                            int dialog_x = (win_w - dialog_w) / 2;
+                            int dialog_y = (win_h - dialog_h) / 2;
+                            int mode_y = dialog_y + 390;
+                            int btn_width = 180;
+                            int btn_spacing = 20;
+                            
+                            // Check each game mode button
+                            for (int i = 0; i < 3; i++) {
+                                int btn_x = dialog_x + 75 + i * (btn_width + btn_spacing);
+                                SDL_Rect mode_btn = {btn_x, mode_y, btn_width, 50};
+                                if (is_mouse_inside(mode_btn, mx, my)) {
+                                    selected_game_mode = i;  // 0=Classic, 1=Sudden Death, 2=Fog of War
+                                    printf("[CLIENT] Selected game mode: %d\n", selected_game_mode);
+                                    break;
+                                }
+                            }
                             
                             // Random button - generates 6-digit code
                             SDL_Rect btn_random = {inp_access_code.rect.x + inp_access_code.rect.w + 10, 
@@ -683,6 +769,7 @@ inp_access_code.is_active = is_mouse_inside(inp_access_code.rect, mx, my);
                                     pkt.type = MSG_CREATE_LOBBY;
                                     strncpy(pkt.room_name, inp_room_name.text, MAX_ROOM_NAME - 1);
                                     pkt.is_private = (code_len == 6) ? 1 : 0;
+                                    pkt.game_mode = selected_game_mode;  // Send selected game mode
                                     if (pkt.is_private) {
                                         strncpy(pkt.access_code, inp_access_code.text, 7);
                                     }
@@ -751,19 +838,8 @@ inp_access_code.is_active = is_mouse_inside(inp_access_code.rect, mx, my);
                     
                 case SCREEN_LOBBY_ROOM:
                     if (e.type == SDL_MOUSEBUTTONDOWN) {
-                        if (is_mouse_inside(btn_leave.rect, mx, my)) {
-                            send_packet(MSG_LEAVE_LOBBY, 0);
-                            current_screen = SCREEN_LOBBY_LIST;
-                            send_packet(MSG_LIST_LOBBIES, 0);
-                            lobby_error_message[0] = '\0';
-                        }
-                        else if (my_player_id != current_lobby.host_id) {
-                            if (is_mouse_inside(btn_ready.rect, mx, my)) {
-                                send_packet(MSG_READY, 0);
-                                lobby_error_message[0] = '\0';
-                            }
-                        }
-                        else if (my_player_id == current_lobby.host_id) {
+                        // Check Start/Ready buttons FIRST (highest priority)
+                        if (my_player_id == current_lobby.host_id) {
                             if (is_mouse_inside(btn_start.rect, mx, my)) {
                                 if (current_lobby.num_players < 2) {
                                     strncpy(lobby_error_message, "Need at least 2 players to start!", 
@@ -777,6 +853,51 @@ inp_access_code.is_active = is_mouse_inside(inp_access_code.rect, mx, my);
                                     send_packet(MSG_START_GAME, 0);
                                     lobby_error_message[0] = '\0';
                                 }
+                            }
+                        } else if (is_mouse_inside(btn_ready.rect, mx, my)) {
+                            send_packet(MSG_READY, 0);
+                        }
+                        
+                        // Leave button
+                        if (is_mouse_inside(btn_leave.rect, mx, my)) {
+                            send_packet(MSG_LEAVE_LOBBY, 0);
+                            current_screen = SCREEN_LOBBY_LIST;
+                            send_packet(MSG_LIST_LOBBIES, 0);
+                            lobby_error_message[0] = '\0';
+                        }
+                        // Lock Room button (host only)
+                        else if (my_player_id == current_lobby.host_id && 
+                                is_mouse_inside((SDL_Rect){1620, 100, 180, 50}, mx, my)) {
+                            // Toggle lock - show notification (backend not implemented)
+                            snprintf(notification_message, sizeof(notification_message),
+                                    "Room locking coming soon!");
+                            notification_time = SDL_GetTicks();
+                        }
+                        // Chat button
+                        else if (is_mouse_inside((SDL_Rect){1620, 170, 180, 50}, mx, my)) {
+                            // Open chat - show notification (backend not implemented)
+                            snprintf(notification_message, sizeof(notification_message),
+                                    "Chat system coming soon!");
+                            notification_time = SDL_GetTicks();
+                        }
+                        // Kick buttons (host only, check for each player)
+                        else if (my_player_id == current_lobby.host_id) {
+                            int card_y = 200;
+                            int card_width = 850;
+                            int start_x = (1920 - card_width) / 2;
+                            
+                            for (int i = 0; i < current_lobby.num_players; i++) {
+                                if (i != current_lobby.host_id) {
+                                    SDL_Rect kick_btn = {start_x + card_width - 230, card_y + 35, 90, 40};
+                                    if (is_mouse_inside(kick_btn, mx, my)) {
+                                        // Kick player - show notification (backend not implemented)
+                                        snprintf(notification_message, sizeof(notification_message),
+                                                "Kick player feature coming soon!");
+                                        notification_time = SDL_GetTicks();
+                                        break;
+                                    }
+                                }
+                                card_y += 130;
                             }
                         }
                     }
@@ -822,6 +943,28 @@ inp_access_code.is_active = is_mouse_inside(inp_access_code.rect, mx, my);
                         
                         if (pkt.data >= 0 || pkt.type == MSG_PLANT_BOMB) {
                             send(sock, &pkt, sizeof(pkt), 0);
+                        }
+                    }
+                    break;
+                
+                case SCREEN_POST_MATCH:
+                    if (e.type == SDL_MOUSEBUTTONDOWN) {
+                        // Post-match screen buttons
+                        printf("[CLIENT] Post-match click at (%d, %d)\n", mx, my);
+                        if (is_mouse_inside((SDL_Rect){660, 850, 250, 60}, mx, my)) {
+                            // Rematch - return to lobby room for another game
+                            printf("[CLIENT] Rematch button clicked - returning to lobby room\n");
+                            current_screen = SCREEN_LOBBY_ROOM;
+                            post_match_shown = 0;  // Reset for next match
+                            // Note: Players are still in the lobby, host can start another game
+                        }
+                        if (is_mouse_inside((SDL_Rect){930, 850, 250, 60}, mx, my)) {
+                            // Return to lobby list - LEAVE CURRENT LOBBY FIRST
+                            printf("[CLIENT] Return to lobby button clicked - leaving lobby and switching to LOBBY_LIST\n");
+                            send_packet(MSG_LEAVE_LOBBY, 0);  // Leave current lobby
+                            current_screen = SCREEN_LOBBY_LIST;
+                            send_packet(MSG_LIST_LOBBIES, 0);  // Request fresh lobby list
+                            post_match_shown = 0;  // Reset for next match
                         }
                     }
                     break;
@@ -898,11 +1041,15 @@ inp_access_code.is_active = is_mouse_inside(inp_access_code.rect, mx, my);
                                 list_y += 70;
                             }
                             
-                            // Check Accept/Decline buttons for pending requests
-                            int pending_y = 140;  // Match rendering position
+                            // Check Accept/Decline buttons for pending requests - MATCH ui_new_screens.c
+                            int pending_y = 140;  // Starting Y position (matches ui_new_screens.c line 155)
+                            int pending_x = 900;  // Right column X position (matches ui_new_screens.c line 156)
+                            pending_y += 50;  // Skip title offset
+                            
                             for (int i = 0; i < pending_count && i < 5; i++) {
-                                SDL_Rect accept_btn = {460, pending_y + 32, 80, 22};
-                                SDL_Rect decline_btn = {550, pending_y + 32, 80, 22};
+                                // MATCH rendering coordinates from ui_new_screens.c lines 197, 210
+                                SDL_Rect accept_btn = {pending_x + 20, pending_y + 60, 90, 35};
+                                SDL_Rect decline_btn = {pending_x + 125, pending_y + 60, 90, 35};
                                 
                                 if (is_mouse_inside(accept_btn, mx, my)) {
                                     // Accept friend request
@@ -932,7 +1079,7 @@ inp_access_code.is_active = is_mouse_inside(inp_access_code.rect, mx, my);
                                     break;
                                 }
                                 
-                                pending_y += 70;
+                                pending_y += 125;  // Card spacing (matches ui_new_screens.c line 222)
                             }
                             
                             if (is_mouse_inside(btn_send_friend_request.rect, mx, my)) {
@@ -956,7 +1103,26 @@ inp_access_code.is_active = is_mouse_inside(inp_access_code.rect, mx, my);
                         SDL_GetRendererOutputSize(rend, &win_w, &win_h);
                         SDL_Rect back_rect = {win_w/2 - 75, win_h - 100, 150, 50};
                         
-                        if (is_mouse_inside(back_rect, mx, my)) {
+                        if (current_screen == SCREEN_SETTINGS) {
+                            // Settings screen back button
+                            if (is_mouse_inside((SDL_Rect){980, 850, 200, 60}, mx, my)) {
+                                current_screen = SCREEN_LOBBY_LIST;
+                                send_packet(MSG_LIST_LOBBIES, 0);
+                            }
+                            // Tab switching
+                            int tab_y = 140;
+                            int tab_width = 180;
+                            int tab_height = 50;
+                            int tab_spacing = 20;
+                            int tabs_start_x = (win_w - (tab_width * 3 + tab_spacing * 2)) / 2;
+                            for (int i = 0; i < 3; i++) {
+                                SDL_Rect tab_rect = {tabs_start_x + i * (tab_width + tab_spacing), tab_y, tab_width, tab_height};
+                                if (is_mouse_inside(tab_rect, mx, my)) {
+                                    settings_active_tab = i;
+                                    break;
+                                }
+                            }
+                        } else if (is_mouse_inside(back_rect, mx, my)) {
                             current_screen = SCREEN_LOBBY_LIST;
                             send_packet(MSG_LIST_LOBBIES, 0);
                         }
@@ -1031,6 +1197,8 @@ inp_access_code.is_active = is_mouse_inside(inp_access_code.rect, mx, my);
                 btn_create.is_hovered = is_mouse_inside(btn_create.rect, mx, my);
                 btn_refresh.is_hovered = is_mouse_inside(btn_refresh.rect, mx, my);
                 btn_friends.is_hovered = is_mouse_inside(btn_friends.rect, mx, my);
+                btn_quick_play.is_hovered = is_mouse_inside(btn_quick_play.rect, mx, my);
+                btn_settings.is_hovered = is_mouse_inside(btn_settings.rect, mx, my);
                 btn_profile.is_hovered = is_mouse_inside(btn_profile.rect, mx, my);
                 btn_leaderboard.is_hovered = is_mouse_inside(btn_leaderboard.rect, mx, my);
                 btn_create_confirm.is_hovered = is_mouse_inside(btn_create_confirm.rect, mx, my);
@@ -1046,6 +1214,12 @@ inp_access_code.is_active = is_mouse_inside(inp_access_code.rect, mx, my);
                 // Draw additional nav buttons - MODERNIZED with rounded corners
                 // Friends button
                 draw_button(rend, font_small, &btn_friends);
+                
+                // Quick Play button
+                draw_button(rend, font_small, &btn_quick_play);
+                
+                // Settings button (bottom left)
+                draw_button(rend, font_small, &btn_settings);
                 
                 // Profile & Leaderboard buttons (top right)
                 draw_button(rend, font_small, &btn_profile);
@@ -1103,7 +1277,13 @@ inp_access_code.is_active = is_mouse_inside(inp_access_code.rect, mx, my);
             }
 
             case SCREEN_GAME: {
-                render_game(rend, font_small, tick++, my_player_id);
+                // Calculate elapsed game time
+                int elapsed_seconds = 0;
+                if (game_start_time > 0) {
+                    Uint32 elapsed_ms = SDL_GetTicks() - game_start_time;
+                    elapsed_seconds = elapsed_ms / 1000;
+                }
+                render_game(rend, font_small, tick++, my_player_id, elapsed_seconds);
                 break;
             }
             
@@ -1113,7 +1293,8 @@ inp_access_code.is_active = is_mouse_inside(inp_access_code.rect, mx, my);
                 btn_send_friend_request.is_hovered = is_mouse_inside(btn_send_friend_request.rect, mx, my);
                 
                 render_friends_screen(rend, font_small, friends_list, friends_count,
-                                     pending_requests, pending_count, &back_btn);
+                                     pending_requests, pending_count,
+                                     sent_requests, sent_count, &back_btn);
                 
                 // Draw friend request input and button
                 draw_input_field(rend, font_small, &inp_friend_request);
@@ -1212,6 +1393,30 @@ inp_access_code.is_active = is_mouse_inside(inp_access_code.rect, mx, my);
                 Button back_btn;
                 back_btn.is_hovered = is_mouse_inside(back_btn.rect, mx, my);
                 render_leaderboard_screen(rend, font_large, font_small, leaderboard, leaderboard_count, &back_btn);
+                break;
+            }
+            
+            case SCREEN_SETTINGS: {
+                // Update hover states
+                btn_settings_apply.is_hovered = is_mouse_inside((SDL_Rect){760, 850, 200, 60}, mx, my);
+                Button back_btn_temp = {{980, 850, 200, 60}, "Back", 0};
+                back_btn_temp.is_hovered = is_mouse_inside(back_btn_temp.rect, mx, my);
+                
+                render_settings_screen(rend, font_large, font_small,
+                                      settings_active_tab, &back_btn_temp, &btn_settings_apply);
+                break;
+            }
+            
+            case SCREEN_POST_MATCH: {
+                // Update hover states
+                btn_rematch.is_hovered = is_mouse_inside((SDL_Rect){660, 850, 250, 60}, mx, my);
+                btn_return_lobby.is_hovered = is_mouse_inside((SDL_Rect){930, 850, 250, 60}, mx, my);
+                
+                render_post_match_screen(rend, font_large, font_small,
+                                        post_match_winner_id, post_match_elo_changes,
+                                        post_match_kills, post_match_duration,
+                                        &btn_rematch, &btn_return_lobby,
+                                        &current_state);
                 break;
             }
 

@@ -31,7 +31,7 @@ int db_update_elo(int user_id, int new_elo);
 
 // --- Lobby Functions ---
 void init_lobbies();
-int create_lobby(const char *room_name, const char *host_username, int is_private, const char *access_code);
+int create_lobby(const char *room_name, const char *host_username, int is_private, const char *access_code, int game_mode);
 int join_lobby(int lobby_id, const char *username);
 int join_lobby_with_code(int lobby_id, const char *username, const char *access_code);
 int leave_lobby(int lobby_id, const char *username);
@@ -46,6 +46,8 @@ void init_game(GameState *state, Lobby *lobby);
 void update_game(GameState *state);
 int handle_move(GameState *state, int player_id, int direction);
 int plant_bomb(GameState *state, int player_id);
+int is_tile_visible(GameState *state, int player_id, int tile_x, int tile_y);
+void filter_game_state(GameState *full_state, int player_id, GameState *out_filtered);
 
 // --- Friend System Functions ---
 int friend_send_request(int sender_id, const char *target_display_name);
@@ -58,8 +60,8 @@ int friend_get_sent_requests(int user_id, FriendInfo *out_requests, int max_coun
 
 // --- ELO System Functions ---
 int get_k_factor(int matches_played);
-int calculate_elo_change(int player_rating, int avg_opponent_rating, int placement, int matches_played);
-int elo_update_after_match(int *player_ids, int *placements, int num_players);
+int elo_calculate_change(int my_elo, int opp_elo, int win);
+int elo_update_after_match(int *player_ids, int *placements, int num_players, int *out_elo_changes);
 int get_tier(int elo_rating);
 const char* get_tier_name(int tier);
 

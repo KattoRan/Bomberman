@@ -2,8 +2,47 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
 #include <string.h>
+#include <math.h>
 #include "../common/protocol.h"
 #include "ui.h" 
+
+// External gradient rendering functions from graphics.c
+extern void draw_vertical_gradient(SDL_Renderer *renderer, SDL_Rect rect, SDL_Color top, SDL_Color bottom);
+extern void draw_horizontal_gradient(SDL_Renderer *renderer, SDL_Rect rect, SDL_Color left, SDL_Color right);
+
+// Helper function to truncate text if it exceeds max width
+void truncate_text_to_fit(char *text, size_t text_size, TTF_Font *font, int max_width) {
+    if (!font || !text) return;
+    
+    int text_width, text_height;
+    TTF_SizeText(font, text, &text_width, &text_height);
+    
+    // If text fits, no need to truncate
+    if (text_width <= max_width) return;
+    
+    // Truncate and add ellipsis
+    size_t len = strlen(text);
+    char truncated[256];
+    strncpy(truncated, text, sizeof(truncated) - 1);
+    truncated[sizeof(truncated) - 1] = '\0';
+    
+    // Keep removing characters until it fits (with "...")
+    while (len > 3) {
+        len--;
+        strcpy(truncated + len, "...");
+        truncated[len + 3] = '\0';
+        
+        TTF_SizeText(font, truncated, &text_width, &text_height);
+        if (text_width <= max_width) {
+            strncpy(text, truncated, text_size);
+            text[text_size - 1] = '\0';
+            return;
+        }
+    }
+    
+    // Extreme case: just use "..."
+    strncpy(text, "...", text_size);
+} 
 
 // --- BẢNG MÀU CẢI TIẾN (Modern Dark Theme) ---
 const SDL_Color CLR_BG          = {15, 23, 42, 255};      // Nền xanh đậm sang trọng
@@ -32,37 +71,27 @@ const SDL_Color CLR_GLOW = {255, 255, 255, 60};           // Glow hover
 const SDL_Color CLR_SHADOW_SOFT = {0, 0, 0, 30};           // Soft shadows
 const SDL_Color CLR_SHADOW_HARD = {0, 0, 0, 80};           // Hard shadows
 
-// --- RESPONSIVE DESIGN HELPERS ---
-// Instead of hardcoded pixels, use percentages of screen size
-#define SCREEN_PERCENT_W(w, pct) ((int)((w) * (pct) / 100.0f))
-#define SCREEN_PERCENT_H(h, pct) ((int)((h) * (pct) / 100.0f))
+// --- FIXED LAYOUT FOR 1920x1080 FULLSCREEN ---
+#define FIXED_BUTTON_WIDTH 200
+#define FIXED_BUTTON_HEIGHT 50
+#define FIXED_SPACING 20
+#define FIXED_INPUT_WIDTH 400
+#define FIXED_INPUT_HEIGHT 50
 
-// Standard button sizes (relative to screen) - ADJUSTED SMALLER
-#define BUTTON_WIDTH_PCT 10   // 10% of screen width (was 12%)
-#define BUTTON_HEIGHT_PCT 6   // 6% of screen height (was 7%)
-#define BUTTON_HEIGHT_MIN 35  // Minimum absolute height (was 40)
-#define BUTTON_WIDTH_MIN 100  // Minimum absolute width (was 120)
-
-// Card/Container sizes
-#define CARD_WIDTH_PCT 45     // 45% of screen width
-#define CARD_PADDING_PCT 3    // 3% padding
-
-// Text/spacing scales
-#define SPACING_UNIT_PCT 2    // Base spacing unit (2% of height)
-
-// Helper functions for responsive sizing
+// FIXED button dimensions - no responsive
 int get_button_width(int screen_w) {
-    int w = SCREEN_PERCENT_W(screen_w, BUTTON_WIDTH_PCT);
-    return w < BUTTON_WIDTH_MIN ? BUTTON_WIDTH_MIN : w;
+    (void)screen_w;  // Unused
+    return FIXED_BUTTON_WIDTH;
 }
 
 int get_button_height(int screen_h) {
-    int h = SCREEN_PERCENT_H(screen_h, BUTTON_HEIGHT_PCT);
-    return h < BUTTON_HEIGHT_MIN ? BUTTON_HEIGHT_MIN : h;
+    (void)screen_h;  // Unused
+    return FIXED_BUTTON_HEIGHT;
 }
 
 int get_spacing(int screen_h) {
-    return SCREEN_PERCENT_H(screen_h, SPACING_UNIT_PCT);
+    (void)screen_h;  // Unused
+    return FIXED_SPACING;
 }
 
 #define UI_GRID_SIZE 40
@@ -167,33 +196,74 @@ void draw_layered_shadow(SDL_Renderer *renderer, SDL_Rect rect, int radius, int 
 
 // Vẽ Button với gradient, rounded corners và shadow
 void draw_button(SDL_Renderer *renderer, TTF_Font *font, Button *btn) {
-    SDL_Color bg_color = btn->is_hovered ? CLR_BTN_HOVER : CLR_BTN_NORM;
+    SDL_Color bg_color_top, bg_color_bottom;
+    
+    if (btn->is_hovered) {
+        bg_color_top = (SDL_Color){96, 165, 250, 255};   // Lighter blue
+        bg_color_bottom = CLR_BTN_HOVER;
+    } else {
+        bg_color_top = CLR_BTN_NORM;
+        bg_color_bottom = CLR_PRIMARY_DK;
+    }
     
     // Layered shadow for depth
     draw_layered_shadow(renderer, btn->rect, UI_CORNER_RADIUS, UI_SHADOW_OFFSET);
     
-    // Main button with rounded corners
-    draw_rounded_rect(renderer, btn->rect, bg_color, UI_CORNER_RADIUS);
+    // Main button with vertical gradient
+    draw_vertical_gradient(renderer, btn->rect, bg_color_top, bg_color_bottom);
     
-    // Glow effect on hover
+    // Outer border
+    draw_rounded_border(renderer, btn->rect, bg_color_bottom, UI_CORNER_RADIUS, 1);
+    
+    // Glow effect on hover (stronger and colored)
     if (btn->is_hovered) {
         SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-        SDL_Rect glow = {btn->rect.x - 2, btn->rect.y - 2, btn->rect.w + 4, btn->rect.h + 4};
-        draw_rounded_border(renderer, glow, CLR_GLOW, UI_CORNER_RADIUS + 2, 2);
+        
+        // Pulsing glow
+        float pulse = (sinf(SDL_GetTicks() / 300.0f) + 1.0f) / 2.0f;
+        int glow_alpha = 40 + (int)(pulse * 60);
+        
+        for (int i = 1; i <= 3; i++) {
+            SDL_Rect glow = {btn->rect.x - i, btn->rect.y - i, btn->rect.w + i*2, btn->rect.h + i*2};
+            SDL_Color glow_color = {150, 200, 255, glow_alpha / i};
+            draw_rounded_border(renderer, glow, glow_color, UI_CORNER_RADIUS + i, 1);
+        }
+        
         SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
     }
     
     // Subtle top highlight for 3D effect
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    SDL_Rect highlight = {btn->rect.x + UI_CORNER_RADIUS, btn->rect.y + 1, 
-                          btn->rect.w - 2*UI_CORNER_RADIUS, 2};
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 30);
+    SDL_Rect highlight = {btn->rect.x + UI_CORNER_RADIUS, btn->rect.y + 2, 
+                          btn->rect.w - 2*UI_CORNER_RADIUS, 3};
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 50);
     SDL_RenderFillRect(renderer, &highlight);
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 
-    // Text
+    // Truncate button text to fit
+    char button_text[64];
+    strncpy(button_text, btn->text, sizeof(button_text) - 1);
+    button_text[sizeof(button_text) - 1] = '\0';
+    truncate_text_to_fit(button_text, sizeof(button_text), font, btn->rect.w - 20);
+
+    // Text with shadow for depth
     if (font) {
-        SDL_Surface *surf = TTF_RenderText_Blended(font, btn->text, CLR_WHITE);
+        // Text shadow
+        SDL_Surface *shadow_surf = TTF_RenderText_Blended(font, button_text, (SDL_Color){0, 0, 0, 150});
+        if (shadow_surf) {
+            SDL_Texture *shadow_tex = SDL_CreateTextureFromSurface(renderer, shadow_surf);
+            SDL_Rect shadow_dst = {
+                btn->rect.x + (btn->rect.w - shadow_surf->w) / 2 + 1,
+                btn->rect.y + (btn->rect.h - shadow_surf->h) / 2 + 1,
+                shadow_surf->w, shadow_surf->h
+            };
+            SDL_RenderCopy(renderer, shadow_tex, NULL, &shadow_dst);
+            SDL_DestroyTexture(shadow_tex);
+            SDL_FreeSurface(shadow_surf);
+        }
+        
+        // Main text
+        SDL_Surface *surf = TTF_RenderText_Blended(font, button_text, CLR_WHITE);
         if (surf) {
             SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, surf);
             SDL_Rect dst = {
@@ -383,52 +453,21 @@ void render_login_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Font 
         }
     }
 
-    // Responsive input field sizing
+    // Input field positions already set in main.c (685, 350/450/550, 550x65)
+    // Just draw them
     int is_registration = (email != NULL);
-    int input_height = get_button_height(win_h) - 5;  // Slightly shorter than buttons
     
-    username->rect.x = start_x;
-    username->rect.y = is_registration ? SCREEN_PERCENT_H(win_h, 22) : SCREEN_PERCENT_H(win_h, 30);
-    username->rect.w = content_width;
-    username->rect.h = input_height;
-
-    if (is_registration) {
-        email->rect.x = start_x;
-        email->rect.y = SCREEN_PERCENT_H(win_h, 33);
-        email->rect.w = content_width;
-        email->rect.h = input_height;
-    }
-
-    password->rect.x = start_x;
-    password->rect.y = is_registration ? SCREEN_PERCENT_H(win_h, 44) : SCREEN_PERCENT_H(win_h, 42);
-    password->rect.w = content_width;
-    password->rect.h = input_height;
-
-    // Vẽ input fields
     draw_input_field(renderer, font_small, username);
     if (is_registration) {
+        // Adjust password Y for registration mode
+        password->rect.y = 650;  // More space for email field
         draw_input_field(renderer, font_small, email);
+    } else {
+        password->rect.y = 550;  // Standard login spacing
     }
     draw_input_field(renderer, font_small, password);
 
-    // Responsive button sizing
-    int button_width = get_button_width(win_w);
-    int button_height = get_button_height(win_h);
-    int button_spacing = get_spacing(win_h);
-    int total_button_width = button_width * 2 + button_spacing;
-    int button_start_x = center_x - total_button_width / 2;
-    int button_y = is_registration ? SCREEN_PERCENT_H(win_h, 58) : SCREEN_PERCENT_H(win_h, 58);
-
-    login_btn->rect.x = button_start_x;
-    login_btn->rect.y = button_y;
-    login_btn->rect.w = button_width;
-    login_btn->rect.h = button_height;
-
-    register_btn->rect.x = button_start_x + button_width + button_spacing;
-    register_btn->rect.y = button_y;
-    register_btn->rect.w = button_width;
-    register_btn->rect.h = button_height;
-    
+    // Button positions already set in main.c (760/970, 680, 180x60)
     // Set button labels based on mode
     if (is_registration) {
         strcpy(login_btn->text, "Back");
@@ -448,7 +487,7 @@ void render_login_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Font 
             SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, surf);
             SDL_Rect rect = {
                 center_x - surf->w / 2,
-                460,
+                800,
                 surf->w, 
                 surf->h
             };
@@ -495,11 +534,11 @@ void render_lobby_list_screen(SDL_Renderer *renderer, TTF_Font *font,
         }
     }
     
-    // Responsive lobby cards
-    int y = SCREEN_PERCENT_H(win_h, 15);  // 15% from top
-    int list_width = SCREEN_PERCENT_W(win_w, 55);  // 55% of screen width
-    int card_height = get_button_height(win_h) + 25;  // Scale with screen
-    int start_x = (win_w - list_width) / 2;
+    // FIXED lobby cards for 1920x1080
+    int y = 162;  // Fixed from top
+    int list_width = 1056;  // Fixed width (55% of 1920)
+    int card_height = 75;  // Fixed height
+    int start_x = 432;  // Centered: (1920-1056)/2
 
     for (int i = 0; i < lobby_count; i++) {
         SDL_Rect lobby_rect = {start_x, y, list_width, card_height};
@@ -532,6 +571,9 @@ void render_lobby_list_screen(SDL_Renderer *renderer, TTF_Font *font,
             } else {
                 snprintf(display_name, sizeof(display_name), "%s (ID:%d)", lobbies[i].name, lobbies[i].id);
             }
+            
+            // Truncate to fit in card (leave space for player count)
+            truncate_text_to_fit(display_name, sizeof(display_name), font, 800);
             
             SDL_Surface *name_surf = TTF_RenderText_Blended(font, display_name, CLR_WHITE);
             if (name_surf) {
@@ -628,36 +670,79 @@ void render_lobby_room_screen(SDL_Renderer *renderer, TTF_Font *font,
             SDL_DestroyTexture(tex);
             SDL_FreeSurface(title);
         }
+        
+        // Host-only buttons (Lock Room, Chat) - top right
+        if (my_player_id == lobby->host_id) {
+            // Lock Room button
+            SDL_Rect lock_btn = {1620, 100, 180, 50};
+            SDL_Color lock_bg = lobby->is_locked ? CLR_DANGER : CLR_PRIMARY;
+            const char *lock_text = lobby->is_locked ? "Unlock" : "Lock Room";
+            
+            draw_layered_shadow(renderer, lock_btn, UI_CORNER_RADIUS, 3);
+            draw_rounded_rect(renderer, lock_btn, lock_bg, UI_CORNER_RADIUS);
+            draw_rounded_border(renderer, lock_btn, CLR_GRAY, UI_CORNER_RADIUS, 1);
+            
+            SDL_Surface *surf = TTF_RenderText_Blended(font, lock_text, CLR_WHITE);
+            if (surf) {
+                SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, surf);
+                SDL_Rect rect = {lock_btn.x + (lock_btn.w - surf->w) / 2,
+                                lock_btn.y + (lock_btn.h - surf->h) / 2,
+                                surf->w, surf->h};
+                SDL_RenderCopy(renderer, tex, NULL, &rect);
+                SDL_DestroyTexture(tex);
+                SDL_FreeSurface(surf);
+            }
+        }
+        
+        // Chat button (for everyone)
+        SDL_Rect chat_btn = {1620, 170, 180, 50};
+        draw_layered_shadow(renderer, chat_btn, UI_CORNER_RADIUS, 3);
+        draw_rounded_rect(renderer, chat_btn, CLR_INPUT_BG, UI_CORNER_RADIUS);
+        draw_rounded_border(renderer, chat_btn, CLR_PRIMARY, UI_CORNER_RADIUS, 1);
+        
+        SDL_Surface *surf = TTF_RenderText_Blended(font, "Chat", CLR_WHITE);
+        if (surf) {
+            SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, surf);
+            SDL_Rect rect = {chat_btn.x + (chat_btn.w - surf->w) / 2,
+                            chat_btn.y + (chat_btn.h - surf->h) / 2,
+                            surf->w, surf->h};
+            SDL_RenderCopy(renderer, tex, NULL, &rect);
+            SDL_DestroyTexture(tex);
+            SDL_FreeSurface(surf);
+        }
     }
     
-    // Danh sách players với màu sắc gradient
-    int y = 120;
-    int card_width = 600;
+    // Player list with LARGER cards
+    int y = 180;  // Start a bit lower after title
+    int card_width = 750;  // LARGER (was 600)
     int start_x = (win_w - card_width) / 2;
 
     for (int i = 0; i < lobby->num_players; i++) {
         Player *p = &lobby->players[i];
         
-        int card_height = 75;
+        int card_height = 100;  // LARGER (was 75)
         SDL_Rect card_rect = {start_x, y, card_width, card_height};
         
-        // Shadow Ä'áº¹p hÆ¡n
-        SDL_Rect shadow = {start_x + 4, y + 4, card_width, card_height};
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 100);
-        SDL_RenderFillRect(renderer, &shadow);
+        // Enhanced shadow
+        draw_layered_shadow(renderer, card_rect, UI_CORNER_RADIUS, 5);
         
-        // Ná»n card
-        SDL_Color card_bg;
+        // Card background with gradient
+        SDL_Color card_bg_top, card_bg_bottom;
         if (i == lobby->host_id) {
-            card_bg = (SDL_Color){109, 40, 217, 255};
+            card_bg_top = (SDL_Color){109, 40, 217, 255};
+            card_bg_bottom = (SDL_Color){90, 30, 180, 255};
         } else {
-            card_bg = (SDL_Color){51, 65, 85, 255};
+            card_bg_top = (SDL_Color){51, 65, 85, 255};
+            card_bg_bottom = (SDL_Color){40, 50, 70, 255};
         }
-        SDL_SetRenderDrawColor(renderer, card_bg.r, card_bg.g, card_bg.b, card_bg.a);
-        SDL_RenderFillRect(renderer, &card_rect);
+        draw_vertical_gradient(renderer, card_rect, card_bg_top, card_bg_bottom);
         
-        // Accent bar bÃªn trÃ¡i
-        SDL_Rect accent_bar = {start_x, y, 6, card_height};
+        // Border
+        SDL_SetRenderDrawColor(renderer, 71, 85, 105, 255);
+        draw_rounded_border(renderer, card_rect, (SDL_Color){71, 85, 105, 255}, UI_CORNER_RADIUS, 1);
+        
+        // Accent bar on left (wider)
+        SDL_Rect accent_bar = {start_x, y, 8, card_height};  // 8px wide (was 6)
         SDL_Color accent_color;
         if (i == lobby->host_id) {
             accent_color = (SDL_Color){167, 139, 250, 255}; 
@@ -666,19 +751,13 @@ void render_lobby_room_screen(SDL_Renderer *renderer, TTF_Font *font,
         } else {
             accent_color = CLR_WARNING;
         }
-        SDL_SetRenderDrawColor(renderer, accent_color.r, accent_color.g, accent_color.b, 255);
-        SDL_RenderFillRect(renderer, &accent_bar);
-        
-        //view card
-        SDL_SetRenderDrawColor(renderer, 71, 85, 105, 255);
-        SDL_RenderDrawRect(renderer, &card_rect);
+        draw_rounded_rect(renderer, accent_bar, accent_color, 4);
 
         if (font) {
-            SDL_Rect number_circle = {start_x + 20, y + 22, 30, 30};
-            SDL_SetRenderDrawColor(renderer, 30, 41, 59, 200);
-            SDL_RenderFillRect(renderer, &number_circle);
-            SDL_SetRenderDrawColor(renderer, accent_color.r, accent_color.g, accent_color.b, 255);
-            SDL_RenderDrawRect(renderer, &number_circle);
+            // Number circle - vertically centered in card
+            SDL_Rect number_circle = {start_x + 20, y + (card_height - 40) / 2, 40, 40};
+            draw_rounded_rect(renderer, number_circle, (SDL_Color){30, 41, 59, 200}, 20);
+            draw_rounded_border(renderer, number_circle, accent_color, 20, 2);
             
             char num_str[16];
             snprintf(num_str, sizeof(num_str), "%d", i + 1);
@@ -686,8 +765,8 @@ void render_lobby_room_screen(SDL_Renderer *renderer, TTF_Font *font,
             if (num_surf) {
                 SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, num_surf);
                 SDL_Rect num_rect = {
-                    number_circle.x + (30 - num_surf->w) / 2,
-                    number_circle.y + (30 - num_surf->h) / 2,
+                    number_circle.x + (40 - num_surf->w) / 2,
+                    number_circle.y + (40 - num_surf->h) / 2,
                     num_surf->w, num_surf->h
                 };
                 SDL_RenderCopy(renderer, tex, NULL, &num_rect);
@@ -695,23 +774,29 @@ void render_lobby_room_screen(SDL_Renderer *renderer, TTF_Font *font,
                 SDL_FreeSurface(num_surf);
             }
             
-            // Username
+            // Username - aligned with left content area
             SDL_Color username_color = (i == lobby->host_id) ? 
                 (SDL_Color){233, 213, 255, 255} : CLR_WHITE;
-            SDL_Surface *name_surf = TTF_RenderText_Blended(font, p->username, username_color);
+            
+            // Truncate username to fit in card
+            char username_display[MAX_USERNAME + 1];
+            strncpy(username_display, p->username, MAX_USERNAME);
+            username_display[MAX_USERNAME] = '\0';
+            truncate_text_to_fit(username_display, sizeof(username_display), font, 650);
+            
+            SDL_Surface *name_surf = TTF_RenderText_Blended(font, username_display, username_color);
             if (name_surf) {
                 SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, name_surf);
-                SDL_Rect name_rect = {start_x + 65, y + 15, name_surf->w, name_surf->h};
+                SDL_Rect name_rect = {start_x + 75, y + 20, name_surf->w, name_surf->h};
                 SDL_RenderCopy(renderer, tex, NULL, &name_rect);
                 SDL_DestroyTexture(tex);
                 SDL_FreeSurface(name_surf);
             }
             
-            // Role badge (HOST hoáº·c trÃ¡ng thÃ¡i)
+            // Role badge - aligned below username
             if (i == lobby->host_id) {
-                SDL_Rect host_badge = {start_x + 65, y + 43, 60, 22};
-                SDL_SetRenderDrawColor(renderer, 167, 139, 250, 255);
-                SDL_RenderFillRect(renderer, &host_badge);
+                SDL_Rect host_badge = {start_x + 75, y + 55, 80, 28};
+                draw_rounded_rect(renderer, host_badge, (SDL_Color){167, 139, 250, 255}, 4);
                 
                 SDL_Surface *host_surf = TTF_RenderText_Blended(font, "HOST", 
                     (SDL_Color){30, 27, 75, 255});
@@ -728,19 +813,14 @@ void render_lobby_room_screen(SDL_Renderer *renderer, TTF_Font *font,
                 }
             }
             
-            // Status badge bÃªn pháº£i
+            // Status badge on right - LARGER
             if (i != lobby->host_id) {
-                SDL_Rect status_badge = {start_x + card_width - 100, y + 22, 80, 30};
+                SDL_Rect status_badge = {start_x + card_width - 120, y + 35, 100, 40};  // 100x40 (was 80x30)
                 SDL_Color badge_color = p->is_ready ? CLR_SUCCESS : 
                     (SDL_Color){71, 85, 105, 255};
-                SDL_SetRenderDrawColor(renderer, badge_color.r, badge_color.g, 
-                    badge_color.b, 255);
-                SDL_RenderFillRect(renderer, &status_badge);
-                
-                // Viá»n badge
-                SDL_SetRenderDrawColor(renderer, badge_color.r - 20, badge_color.g - 20,
-                    badge_color.b - 20, 255);
-                SDL_RenderDrawRect(renderer, &status_badge);
+                draw_rounded_rect(renderer, status_badge, badge_color, 6);
+                draw_rounded_border(renderer, status_badge, 
+                    (SDL_Color){badge_color.r - 20, badge_color.g - 20, badge_color.b - 20, 255}, 6, 1);
                 
                 const char *status_text = p->is_ready ? "READY" : "WAITING";
                 SDL_Surface *status_surf = TTF_RenderText_Blended(font, status_text, CLR_WHITE);
@@ -754,6 +834,26 @@ void render_lobby_room_screen(SDL_Renderer *renderer, TTF_Font *font,
                     SDL_RenderCopy(renderer, tex, NULL, &rect);
                     SDL_DestroyTexture(tex);
                     SDL_FreeSurface(status_surf);
+                }
+                
+                // Kick button for host
+                if (my_player_id == lobby->host_id) {
+                    SDL_Rect kick_btn = {start_x + card_width - 230, y + 35, 90, 40};
+                    draw_rounded_rect(renderer, kick_btn, CLR_DANGER, 6);
+                    draw_rounded_border(renderer, kick_btn, (SDL_Color){200, 50, 50, 255}, 6, 1);
+                    
+                    SDL_Surface *kick_surf = TTF_RenderText_Blended(font, "Kick", CLR_WHITE);
+                    if (kick_surf) {
+                        SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, kick_surf);
+                        SDL_Rect rect = {
+                            kick_btn.x + (kick_btn.w - kick_surf->w) / 2,
+                            kick_btn.y + (kick_btn.h - kick_surf->h) / 2,
+                            kick_surf->w, kick_surf->h
+                        };
+                        SDL_RenderCopy(renderer, tex, NULL, &rect);
+                        SDL_DestroyTexture(tex);
+                        SDL_FreeSurface(kick_surf);
+                    }
                 }
             } else {
                 // // Crown icon cho host 
@@ -775,11 +875,11 @@ void render_lobby_room_screen(SDL_Renderer *renderer, TTF_Font *font,
                 // }
             }
         }
-        y += card_height + 15;
+        y += card_height + 20;  // 20px spacing (was 15)
     }
     
     // Vẽ các nút ở dưới cùng - CÂN GIỮA
-    int button_y = win_h - 80;
+    int button_y = win_h - 120;
     int center_x = win_w / 2;
     
     // Cập nhật vị trí nút Leave (luôn hiện)
@@ -856,7 +956,8 @@ void render_lobby_room_screen(SDL_Renderer *renderer, TTF_Font *font,
 void render_create_room_dialog(SDL_Renderer *renderer, TTF_Font *font,
                                 InputField *room_name, InputField *access_code,
                                 Button *create_btn, Button *cancel_btn) {
-    int win_w, win_h;
+    extern int selected_game_mode;  // Global from main.c
+   int win_w, win_h;
     SDL_GetRendererOutputSize(renderer, &win_w, &win_h);
     
     // Darken background
@@ -865,63 +966,66 @@ void render_create_room_dialog(SDL_Renderer *renderer, TTF_Font *font,
     SDL_Rect full_screen = {0, 0, win_w, win_h};
     SDL_RenderFillRect(renderer, &full_screen);
     
-    // Dialog box
-    int dialog_w = 500;
-    int dialog_h = 400;
+    // LARGER Dialog box - 700x650 (increased height for game mode buttons)
+    int dialog_w = 700;
+    int dialog_h = 650;  // Increased from 550 to fit mode buttons
     int dialog_x = (win_w - dialog_w) / 2;
     int dialog_y = (win_h - dialog_h) / 2;
     
     SDL_Rect dialog = {dialog_x, dialog_y, dialog_w, dialog_h};
-    SDL_SetRenderDrawColor(renderer, 30, 41, 59, 255);
-    SDL_RenderFillRect(renderer, &dialog);
+    draw_rounded_rect(renderer, dialog, CLR_INPUT_BG, 12);
+    draw_rounded_border(renderer, dialog, CLR_PRIMARY, 12, 2);
     
-    SDL_SetRenderDrawColor(renderer, 59, 130, 246, 255);
-    SDL_RenderDrawRect(renderer, &dialog);
-    
-    // Title
+    // Title - LARGER
     SDL_Color white = {255, 255, 255, 255};
-    SDL_Surface *title = TTF_RenderText_Blended(font, "Create Room", white);
+    SDL_Surface *title = TTF_RenderText_Blended(font, "Create Room", CLR_ACCENT);
     if (title) {
         SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, title);
-        SDL_Rect rect = {dialog_x + (dialog_w - title->w)/2, dialog_y + 20, title->w, title->h};
+        SDL_Rect rect = {dialog_x + (dialog_w - title->w)/2, dialog_y + 30, title->w, title->h};
         SDL_RenderCopy(renderer, tex, NULL, &rect);
         SDL_DestroyTexture(tex);
         SDL_FreeSurface(title);
     }
     
-    // Position input fields
-    room_name->rect.x = dialog_x + 50;
-    room_name->rect.y = dialog_y + 80;
-    room_name->rect.w = dialog_w - 100;
-    room_name->rect.h = 40;
+    // Input fields - positions already set in main.c, but need to be relative to dialog
+    // Room name input - LARGER 550x60
+    room_name->rect.x = dialog_x + 75;
+    room_name->rect.y = dialog_y + 120;
+    room_name->rect.w = dialog_w - 150;
+    room_name->rect.h = 60;
     
-    // Only show access code field if provided (for create room)
+    draw_input_field(renderer, font, room_name);
+    
+    // Access code field - LARGER
     if (access_code) {
-        access_code->rect.x = dialog_x + 50;
-        access_code->rect.y = dialog_y + 160;
-        access_code->rect.w = dialog_w - 190;  // Make room for random button
-        access_code->rect.h = 40;
+        access_code->rect.x = dialog_x + 75;
+        access_code->rect.y = dialog_y + 230;
+        access_code->rect.w = dialog_w - 300;  // Make room for random button
+        access_code->rect.h = 60;
         
-        // Helper text for access code
-        SDL_Surface *helper_surf = TTF_RenderText_Blended(font, "6-digit code for private room (leave empty for public)", 
-                                                          (SDL_Color){156, 163, 175, 255});
+        draw_input_field(renderer, font, access_code);
+        
+        // Helper text - smaller font would be better but we'll use existing
+        SDL_Surface *helper_surf = TTF_RenderText_Blended(font, "6-digit code (leave empty for public)", 
+                                                          CLR_GRAY);
         if (helper_surf) {
             SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, helper_surf);
-            SDL_Rect rect = {dialog_x + 50, dialog_y + 210, helper_surf->w, helper_surf->h};
+            SDL_Rect rect = {dialog_x + 75, dialog_y + 300, helper_surf->w, helper_surf->h};
             SDL_RenderCopy(renderer, tex, NULL, &rect);
             SDL_DestroyTexture(tex);
             SDL_FreeSurface(helper_surf);
         }
         
-        // Random button - modern style
-        SDL_Rect btn_random = {access_code->rect.x + access_code->rect.w + 10, 
-                               access_code->rect.y, 80, access_code->rect.h};
+        // Random button - LARGER 120x60
+        SDL_Rect btn_random = {access_code->rect.x + access_code->rect.w + 15, 
+                               access_code->rect.y, 120, 60};
        
         // Shadow
-        draw_layered_shadow(renderer, btn_random, 6, 3);
+        draw_layered_shadow(renderer, btn_random, UI_CORNER_RADIUS, 3);
         
-        // Button background
-        draw_rounded_rect(renderer, btn_random, CLR_ACCENT, 6);
+        // Button gradient
+        draw_vertical_gradient(renderer, btn_random, CLR_ACCENT, CLR_ACCENT_DK);
+        draw_rounded_border(renderer, btn_random, CLR_ACCENT_DK, UI_CORNER_RADIUS, 1);
         
         // Button text
         SDL_Surface *btn_surf = TTF_RenderText_Blended(font, "Random", white);
@@ -938,10 +1042,68 @@ void render_create_room_dialog(SDL_Renderer *renderer, TTF_Font *font,
         }
     }
     
-    // Buttons
-    create_btn->rect = (SDL_Rect){dialog_x + 50, dialog_y + dialog_h - 80, 180, 50};
-    cancel_btn->rect = (SDL_Rect){dialog_x + dialog_w - 230, dialog_y + dialog_h - 80, 180, 50};
+    // === GAME MODE SELECTION ===
+    SDL_Surface *mode_label = TTF_RenderText_Blended(font, "Game Mode:", CLR_WHITE);
+    if (mode_label) {
+        SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, mode_label);
+        SDL_Rect rect = {dialog_x + 75, dialog_y + 350, mode_label->w, mode_label->h};
+        SDL_RenderCopy(renderer, tex, NULL, &rect);
+        SDL_DestroyTexture(tex);
+        SDL_FreeSurface(mode_label);
+    }
+    
+    // Three mode buttons: Classic, Sudden Death, Fog of War
+    const char *mode_names[] = {"Classic", "Sudden Death", "Fog of War"};
+    int mode_y = dialog_y + 390;
+    int btn_width = 180;
+    int btn_spacing = 20;
+    
+    for (int i = 0; i < 3; i++) {
+        int btn_x = dialog_x + 75 + i * (btn_width + btn_spacing);
+        SDL_Rect mode_btn = {btn_x, mode_y, btn_width, 50};
+        
+        // Selected mode gets accent color, others get gray
+        SDL_Color btn_bg = (i == selected_game_mode) ? CLR_ACCENT : CLR_INPUT_BG;
+        SDL_Color btn_border = (i == selected_game_mode) ? CLR_ACCENT : CLR_GRAY;
+        
+        draw_layered_shadow(renderer, mode_btn, UI_CORNER_RADIUS, 3);
+        draw_rounded_rect(renderer, mode_btn, btn_bg, UI_CORNER_RADIUS);
+        draw_rounded_border(renderer, mode_btn, btn_border, UI_CORNER_RADIUS, (i == selected_game_mode) ? 2 : 1);
+        
+        // Checkmark for selected mode
+        if (i == selected_game_mode) {
+            SDL_Surface *check_surf = TTF_RenderText_Blended(font, "✓", CLR_SUCCESS);
+            if (check_surf) {
+                SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, check_surf);
+                SDL_Rect check_rect = {btn_x + 10, mode_y + (50 - check_surf->h) / 2, 
+                                       check_surf->w, check_surf->h};
+                SDL_RenderCopy(renderer, tex, NULL, &check_rect);
+                SDL_DestroyTexture(tex);
+                SDL_FreeSurface(check_surf);
+            }
+        }
+        
+        // Mode name
+        SDL_Surface *name_surf = TTF_RenderText_Blended(font, mode_names[i], CLR_WHITE);
+        if (name_surf) {
+            SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, name_surf);
+            SDL_Rect name_rect = {
+                btn_x + (btn_width - name_surf->w) / 2,
+                mode_y + (50 - name_surf->h) / 2,
+                name_surf->w, name_surf->h
+            };
+            SDL_RenderCopy(renderer, tex, NULL, &name_rect);
+            SDL_DestroyTexture(tex);
+            SDL_FreeSurface(name_surf);
+        }
+    }
+    
+    // Buttons - LARGER 220x60 (was 180x50) - ONLY SET POSITION, don't draw here
+    create_btn->rect = (SDL_Rect){dialog_x + 120, dialog_y + dialog_h - 100, 220, 60};
+    cancel_btn->rect = (SDL_Rect){dialog_x + dialog_w - 340, dialog_y + dialog_h - 100, 220, 60};
     
     strcpy(create_btn->text, "Create");
     strcpy(cancel_btn->text, "Cancel");
+    
+    // NOTE: Buttons and input fields are drawn by main.c after this function returns
 }

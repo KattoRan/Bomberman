@@ -86,22 +86,38 @@ int friend_send_request(int sender_id, const char *target_display_name) {
 
 // Accept friend request
 int friend_accept_request(int user_id, int requester_id) {
+    printf("[FRIEND DEBUG] Accept called: user_id=%d, requester_id=%d\n", user_id, requester_id);
+    
     sqlite3_stmt *stmt;
     const char *sql = 
         "UPDATE Friendships SET status = 'ACCEPTED', accepted_at = CURRENT_TIMESTAMP "
         "WHERE user_id_1 = ? AND user_id_2 = ? AND status = 'PENDING'";
     
     if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        printf("[FRIEND DEBUG] Prepare failed: %s\n", sqlite3_errmsg(db));
         return -1;
     }
     
     sqlite3_bind_int(stmt, 1, requester_id);
     sqlite3_bind_int(stmt, 2, user_id);
     
+    printf("[FRIEND DEBUG] Executing UPDATE WHERE user_id_1=%d AND user_id_2=%d AND status='PENDING'\n", 
+           requester_id, user_id);
+    
     int rc = sqlite3_step(stmt);
+    int changes = sqlite3_changes(db);
+    
+    printf("[FRIEND DEBUG] Result: rc=%d, changes=%d\n", rc, changes);
+    
     sqlite3_finalize(stmt);
     
     if (rc != SQLITE_DONE) {
+        printf("[FRIEND DEBUG] Failed: rc != SQLITE_DONE, error: %s\n", sqlite3_errmsg(db));
+        return -1;
+    }
+    
+    if (changes == 0) {
+        printf("[FRIEND DEBUG] Failed: No rows affected (friendship record not found)\n");
         return -1;
     }
     
@@ -109,6 +125,7 @@ int friend_accept_request(int user_id, int requester_id) {
            user_id, requester_id);
     return 0;
 }
+
 
 // Decline/remove friend request
 int friend_decline_request(int user_id, int requester_id) {

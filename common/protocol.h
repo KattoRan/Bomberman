@@ -16,6 +16,11 @@
 #define MAP_WIDTH 15
 #define MAP_HEIGHT 13
 
+// Game modes
+#define GAME_MODE_CLASSIC 0
+#define GAME_MODE_SUDDEN_DEATH 1
+#define GAME_MODE_FOG_OF_WAR 2
+
 // Tile types
 #define EMPTY 0
 #define WALL_HARD 1
@@ -83,12 +88,13 @@
 #define AUTH_USER_EXISTS 2
 #define AUTH_INVALID 3
 
-// Error codes
-#define ERR_LOBBY_NOT_FOUND -1
-#define ERR_LOBBY_FULL -2
+// Server response codes (errors)
+#define ERR_LOBBY_NOT_FOUND -2
 #define ERR_LOBBY_GAME_IN_PROGRESS -3
-#define ERR_LOBBY_LOCKED -4
+#define ERR_LOBBY_FULL -4
 #define ERR_LOBBY_WRONG_ACCESS_CODE -5
+#define ERR_LOBBY_LOCKED -6
+#define ERR_LOBBY_DUPLICATE_USER -7  // User already in lobby
 #define ERR_NOT_HOST 3
 #define ERR_NOT_ENOUGH_PLAYERS 4
 #define ERR_ALREADY_IN_LOBBY 5
@@ -147,6 +153,7 @@ typedef struct {
     int is_private;              // 0 = public, 1 = private
     char access_code[8];         // 6-digit code (plus null terminator)
     int is_locked;               // 0 = unlocked, 1 = locked (no new joins)
+    int game_mode;               // Game mode: 0=Classic, 1=Sudden Death, 2=Fog of War
 } Lobby;
 
 // Game state
@@ -156,7 +163,13 @@ typedef struct {
     int num_players;
     int game_status;
     int winner_id;
+    int kills[MAX_CLIENTS];  // Kill count per player this match
+    int elo_changes[MAX_CLIENTS];  // ELO change for each player (+/-)
+    long long match_start_time;  // Unix timestamp when match started
+    int match_duration_seconds;  // Match duration in seconds
     long long end_game_time;
+    int game_mode;               // Active game mode (0=Classic, 1=Sudden Death, 2=Fog of War)
+    int fog_radius;              // Fog of war visibility radius in tiles (5 = default)
 } GameState;
 
 // Client packet - ENHANCED
@@ -178,6 +191,7 @@ typedef struct {
     char access_code[8];               // For joining private rooms
     int is_private;                    // For creating private rooms
     int target_player_id;              // For kick, spectator view
+    int game_mode;                     // For room creation: game mode selection
 } ClientPacket;
 
 // Server packet - ENHANCED

@@ -2,25 +2,162 @@
 #include <SDL2/SDL_ttf.h>
 #include <math.h>
 #include <string.h>
+#include <stdlib.h>
 #include "../common/protocol.h"
 
 #define TILE_SIZE 40
 #define WINDOW_WIDTH (MAP_WIDTH * TILE_SIZE)
 #define WINDOW_HEIGHT (MAP_HEIGHT * TILE_SIZE + 50)
 #define MAX_NOTIFICATIONS 5
-#define MAX_EVENTS 3
-
-// Sidebar layout
-static const int SIDEBAR_PADDING = 16;
-static const int LINE_HEIGHT = 18;
-static const int LINE_GAP = 5;
-static const int SECTION_GAP_SMALL = 16; // after profile
-static const int SECTION_GAP = 18;       // between main sections
-static const int FEED_LIMIT = 3;
+#define MAX_PARTICLES 200
 
 extern GameState current_state;
-extern Lobby current_lobby;
-extern char my_username[MAX_USERNAME];
+
+// ===== PARTICLE SYSTEM =====
+typedef struct {
+    float x, y;
+    float vx, vy;
+    SDL_Color color;
+    int lifetime;
+    int max_lifetime;
+    float size;
+    int is_active;
+} Particle;
+
+Particle particles[MAX_PARTICLES];
+
+void init_particles() {
+    for (int i = 0; i < MAX_PARTICLES; i++) {
+        particles[i].is_active = 0;
+    }
+}
+
+void add_particle(float x, float y, float vx, float vy, SDL_Color color, int lifetime, float size) {
+    for (int i = 0; i < MAX_PARTICLES; i++) {
+        if (!particles[i].is_active) {
+            particles[i].x = x;
+            particles[i].y = y;
+            particles[i].vx = vx;
+            particles[i].vy = vy;
+            particles[i].color = color;
+            particles[i].lifetime = lifetime;
+            particles[i].max_lifetime = lifetime;
+            particles[i].size = size;
+            particles[i].is_active = 1;
+            break;
+        }
+    }
+}
+
+void update_particles() {
+    for (int i = 0; i < MAX_PARTICLES; i++) {
+        if (particles[i].is_active) {
+            particles[i].x += particles[i].vx;
+            particles[i].y += particles[i].vy;
+            particles[i].lifetime--;
+            
+            // Gravity effect
+            particles[i].vy += 0.1f;
+            
+            if (particles[i].lifetime <= 0) {
+                particles[i].is_active = 0;
+            }
+        }
+    }
+}
+
+void render_particles(SDL_Renderer *renderer) {
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    for (int i = 0; i < MAX_PARTICLES; i++) {
+        if (particles[i].is_active) {
+            float alpha_ratio = (float)particles[i].lifetime / particles[i].max_lifetime;
+            int alpha = (int)(255 * alpha_ratio);
+            
+            SDL_Color c = particles[i].color;
+            SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, alpha);
+            
+            int size = (int)(particles[i].size * (0.5f + alpha_ratio * 0.5f));
+            SDL_Rect rect = {(int)particles[i].x - size/2, (int)particles[i].y - size/2, size, size};
+            SDL_RenderFillRect(renderer, &rect);
+        }
+    }
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+}
+
+// ===== EASING FUNCTIONS =====
+float ease_in_out_cubic(float t) {
+    return t < 0.5f ? 4 * t * t * t : 1 - pow(-2 * t + 2, 3) / 2;
+}
+
+float ease_out_bounce(float t) {
+    const float n1 = 7.5625f;
+    const float d1 = 2.75f;
+    
+    if (t < 1 / d1) {
+        return n1 * t * t;
+    } else if (t < 2 / d1) {
+        t -= 1.5f / d1;
+        return n1 * t * t + 0.75f;
+    } else if (t < 2.5 / d1) {
+        t -= 2.25f / d1;
+        return n1 * t * t + 0.9375f;
+    } else {
+        t -= 2.625f / d1;
+        return n1 * t * t + 0.984375f;
+    }
+}
+
+// ===== GRADIENT RENDERING =====
+void draw_vertical_gradient(SDL_Renderer *renderer, SDL_Rect rect, SDL_Color top, SDL_Color bottom) {
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    for (int y = 0; y < rect.h; y++) {
+        float ratio = (float)y / rect.h;
+        SDL_Color color = {
+            (Uint8)(top.r + (bottom.r - top.r) * ratio),
+            (Uint8)(top.g + (bottom.g - top.g) * ratio),
+            (Uint8)(top.b + (bottom.b - top.b) * ratio),
+            (Uint8)(top.a + (bottom.a - top.a) * ratio)
+        };
+        SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+        SDL_RenderDrawLine(renderer, rect.x, rect.y + y, rect.x + rect.w, rect.y + y);
+    }
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+}
+
+void draw_horizontal_gradient(SDL_Renderer *renderer, SDL_Rect rect, SDL_Color left, SDL_Color right) {
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    for (int x = 0; x < rect.w; x++) {
+        float ratio = (float)x / rect.w;
+        SDL_Color color = {
+            (Uint8)(left.r + (right.r - left.r) * ratio),
+            (Uint8)(left.g + (right.g - left.g) * ratio),
+            (Uint8)(left.b + (right.b - left.b) * ratio),
+            (Uint8)(left.a + (right.a - left.a) * ratio)
+        };
+        SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+        SDL_RenderDrawLine(renderer, rect.x + x, rect.y, rect.x + x, rect.y + rect.h);
+    }
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+}
+
+void draw_glow_circle(SDL_Renderer *renderer, int cx, int cy, int radius, SDL_Color color, int max_alpha) {
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    for (int r = radius; r > 0; r--) {
+        float ratio = (float)r / radius;
+        int alpha = (int)(max_alpha * (1.0f - ratio));
+        SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, alpha);
+        
+        // Draw circle approximation
+        for (int angle = 0; angle < 360; angle += 5) {
+            float rad = angle * 3.14159f / 180.0f;
+            int x = cx + (int)(r * cos(rad));
+            int y = cy + (int)(r * sin(rad));
+            SDL_Rect pixel = {x, y, 2, 2};
+            SDL_RenderFillRect(renderer, &pixel);
+        }
+    }
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+}
 
 // Màu sắc
 const SDL_Color COLOR_BACKGROUND = {34, 139, 34, 255};
@@ -135,42 +272,110 @@ void draw_tile(SDL_Renderer *renderer, int x, int y, SDL_Color color, int draw_b
 }
 
 void draw_bomb(SDL_Renderer *renderer, int x, int y, int tick) {
-    SDL_Rect bomb_rect = {x * TILE_SIZE + 5, y * TILE_SIZE + 5, 
-                          TILE_SIZE - 10, TILE_SIZE - 10};
+    // Pulsing glow effect
+    float pulse = (sinf(tick * 0.15f) + 1.0f) / 2.0f;  // 0.0 to 1.0
+    int glow_radius = 18 + (int)(pulse * 8);
+    SDL_Color glow_color = {255, 50, 50, 0};
+    draw_glow_circle(renderer, x * TILE_SIZE + TILE_SIZE/2, y * TILE_SIZE + TILE_SIZE/2, 
+                     glow_radius, glow_color, 60 + (int)(pulse * 40));
     
-    if ((tick / 10) % 2 == 0) {
-        SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
-    } else {
-        SDL_SetRenderDrawColor(renderer, 200, 0, 0, 255);
-    }
-    SDL_RenderFillRect(renderer, &bomb_rect);
+    // Breathing bomb body
+    int breath = (int)(pulse * 4);
+    SDL_Rect bomb_rect = {x * TILE_SIZE + 5 - breath, y * TILE_SIZE + 5 - breath, 
+                          TILE_SIZE - 10 + breath*2, TILE_SIZE - 10 + breath*2};
     
+    // Gradient fill for bomb (dark to bright red)
+    SDL_Color dark_red = {150, 0, 0, 255};
+    SDL_Color bright_red = {255, 30, 30, 255};
+    SDL_Color bomb_color = ((tick / 10) % 2 == 0) ? bright_red : dark_red;
+    
+    // Vertical gradient
+    draw_vertical_gradient(renderer, bomb_rect, bright_red, dark_red);
+    
+    // Shine highlight on top
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_Rect shine = {bomb_rect.x + 4, bomb_rect.y + 2, bomb_rect.w - 8, 6};
+    SDL_SetRenderDrawColor(renderer, 255, 200, 200, 100);
+    SDL_RenderFillRect(renderer, &shine);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+    
+    // Enhanced fuse with glow
     SDL_SetRenderDrawColor(renderer, 50, 50, 50, 255);
     SDL_Rect fuse = {x * TILE_SIZE + TILE_SIZE/2 - 2, 
                      y * TILE_SIZE + 2, 4, 8};
     SDL_RenderFillRect(renderer, &fuse);
+    
+    // Fuse spark
+    if ((tick / 5) % 2 == 0) {
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(renderer, 255, 200, 0, 200);
+        SDL_Rect spark = {fuse.x - 1, fuse.y - 2, 6, 4};
+        SDL_RenderFillRect(renderer, &spark);
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+    }
 }
 
 void draw_explosion(SDL_Renderer *renderer, int x, int y, int tick) {
+    int cx = x * TILE_SIZE + TILE_SIZE/2;
+    int cy = y * TILE_SIZE + TILE_SIZE/2;
+    
+    // Create particles on first tick
+    static int last_explosion_tick[MAP_WIDTH][MAP_HEIGHT] = {0};
+    if (tick != last_explosion_tick[x][y]) {
+        last_explosion_tick[x][y] = tick;
+        // Add explosion particles
+        for (int i = 0; i < 15; i++) {
+            float angle = (float)(rand() % 360) * 3.14159f / 180.0f;
+            float speed = 1.0f + (float)(rand() % 100) / 50.0f;
+            SDL_Color part_color = (rand() % 2 == 0) ? 
+                (SDL_Color){255, 165, 0, 255} : (SDL_Color){255, 255, 0, 255};
+            add_particle(cx, cy, cos(angle) * speed, sin(angle) * speed - 1.0f,
+                        part_color, 15 + rand() % 15, 4 + rand() % 4);
+        }
+    }
+    
+    // Pulsing expansion
     int pulse = (tick % 20) - 10;
     int size = TILE_SIZE - abs(pulse);
     int offset = (TILE_SIZE - size) / 2;
     
-    SDL_Rect exp_rect = {x * TILE_SIZE + offset, y * TILE_SIZE + offset, 
-                         size, size};
+    // Multiple explosion layers with different colors
+    // Outer layer - orange
+    SDL_Rect outer = {x * TILE_SIZE + offset - 2, y * TILE_SIZE + offset - 2, size + 4, size + 4};
+    draw_vertical_gradient(renderer, outer, (SDL_Color){255, 100, 0, 200}, (SDL_Color){255, 69, 0, 150});
     
-    SDL_SetRenderDrawColor(renderer, 255, 165, 0, 200);
-    SDL_RenderFillRect(renderer, &exp_rect);
+    // Middle layer - brighter orange
+    SDL_Rect middle = {x * TILE_SIZE + offset, y * TILE_SIZE + offset, size, size};
+    draw_vertical_gradient(renderer, middle, (SDL_Color){255, 200, 0, 220}, (SDL_Color){255, 140, 0, 180});
     
-    SDL_SetRenderDrawColor(renderer, 255, 255, 0, 255);
-    SDL_RenderDrawRect(renderer, &exp_rect);
+    // Inner core - yellow/white
+    int core_size = size * 2 / 3;
+    int core_offset = (TILE_SIZE - core_size) / 2;
+    SDL_Rect core = {x * TILE_SIZE + core_offset, y * TILE_SIZE + core_offset, core_size, core_size};
+    draw_vertical_gradient(renderer, core, (SDL_Color){255, 255, 200, 240}, (SDL_Color){255, 255, 100, 200});
+    
+    // Glow around explosion
+    int glow_intensity = 20 - abs(pulse);
+    draw_glow_circle(renderer, cx, cy, TILE_SIZE/2 + abs(pulse), 
+                     (SDL_Color){255, 165, 0, 0}, glow_intensity * 8);
+    
+    // Border flash
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 150);
+    SDL_RenderDrawRect(renderer, &middle);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 }
 
 void draw_powerup(SDL_Renderer *renderer, int x, int y, int type, int tick) {
-    int alpha = 200 + (int)(55 * sin(tick * 0.1));
+    // Floating animation
+    float float_offset = sinf(tick * 0.08f) * 3.0f;
     
-    SDL_Rect powerup_rect = {x * TILE_SIZE + 8, y * TILE_SIZE + 8,
-                             TILE_SIZE - 16, TILE_SIZE - 16};
+    // Enhanced pulsing glow
+    float pulse = (sinf(tick * 0.1f) + 1.0f) / 2.0f;  // 0.0 to 1.0
+    int alpha = 200 + (int)(55 * pulse);
+    
+    int cx = x * TILE_SIZE + TILE_SIZE/2;
+    int cy = y * TILE_SIZE + TILE_SIZE/2 + (int)float_offset;
     
     SDL_Color color;
     switch (type) {
@@ -187,23 +392,48 @@ void draw_powerup(SDL_Renderer *renderer, int x, int y, int type, int tick) {
             return;
     }
     
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, alpha);
-    for (int i = 0; i < 3; i++) {
+    // Large rotating glow
+    int glow_radius = 20 + (int)(pulse * 10);
+    draw_glow_circle(renderer, cx, cy, glow_radius, color, 80 + (int)(pulse * 60));
+    
+    SDL_Rect powerup_rect = {x * TILE_SIZE + 8, y * TILE_SIZE + 8 + (int)float_offset,
+                             TILE_SIZE - 16, TILE_SIZE - 16};
+    
+    // White border glow with enhanced pulsing
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    for (int i = 3; i >= 0; i--) {
         SDL_Rect border = {
             powerup_rect.x - i, 
             powerup_rect.y - i,
             powerup_rect.w + 2*i, 
             powerup_rect.h + 2*i
         };
+        int border_alpha = alpha * (4 - i) / 4;
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, border_alpha);
         SDL_RenderDrawRect(renderer, &border);
     }
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
     
-    SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, alpha);
-    SDL_RenderFillRect(renderer, &powerup_rect);
+    // Gradient fill for powerup
+    SDL_Color light_color = {
+        (Uint8)(color.r + (255 - color.r) / 2),
+        (Uint8)(color.g + (255 - color.g) / 2),
+        (Uint8)(color.b + (255 - color.b) / 2),
+        alpha
+    };
+    SDL_Color dark_color = color;
+    dark_color.a = alpha;
+    draw_vertical_gradient(renderer, powerup_rect, light_color, dark_color);
     
+    // Shine highlight
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_Rect shine = {powerup_rect.x + 4, powerup_rect.y + 2, powerup_rect.w - 8, 6};
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 120);
+    SDL_RenderFillRect(renderer, &shine);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+    
+    // Icon symbols
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-    int cx = x * TILE_SIZE + TILE_SIZE/2;
-    int cy = y * TILE_SIZE + TILE_SIZE/2;
     
     if (type == POWERUP_BOMB) {
         SDL_Rect b1 = {cx - 6, cy - 8, 3, 16};
@@ -221,6 +451,25 @@ void draw_powerup(SDL_Renderer *renderer, int x, int y, int type, int tick) {
         SDL_RenderFillRect(renderer, &f1);
         SDL_RenderFillRect(renderer, &f2);
         SDL_RenderFillRect(renderer, &f3);
+    } else if (type == POWERUP_SPEED) {
+        // Speed arrows
+        SDL_Rect s1 = {cx - 8, cy - 6, 8, 3};
+        SDL_Rect s2 = {cx - 4, cy - 2, 10, 3};
+        SDL_Rect s3 = {cx, cy + 2, 8, 3};
+        SDL_RenderFillRect(renderer, &s1);
+        SDL_RenderFillRect(renderer, &s2);
+        SDL_RenderFillRect(renderer, &s3);
+    }
+    
+    // Sparkle effects
+    if ((tick / 20) % 3 == 0) {
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+        int sparkle_x = x * TILE_SIZE + 6 + (tick % 10);
+        int sparkle_y = y * TILE_SIZE + 6 + ((tick + 10) % 10);
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 200);
+        SDL_Rect sparkle = {sparkle_x, sparkle_y, 2, 2};
+        SDL_RenderFillRect(renderer, &sparkle);
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
     }
 }
 
@@ -307,8 +556,15 @@ void draw_status_bar(SDL_Renderer *renderer, TTF_Font *font, int my_player_id) {
     int bar_y = MAP_HEIGHT * TILE_SIZE;
     
     SDL_Rect status_bg = {0, bar_y, WINDOW_WIDTH, 50};
-    SDL_SetRenderDrawColor(renderer, 50, 50, 50, 255);
-    SDL_RenderFillRect(renderer, &status_bg);
+    // Gradient background for status bar
+    draw_vertical_gradient(renderer, status_bg, (SDL_Color){40, 40, 50, 255}, (SDL_Color){25, 25, 35, 255});
+    
+    // Top border glow
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, 100, 150, 255, 100);
+    SDL_RenderDrawLine(renderer, 0, bar_y, WINDOW_WIDTH, bar_y);
+    SDL_RenderDrawLine(renderer, 0, bar_y + 1, WINDOW_WIDTH, bar_y + 1);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
     
     if (font) {
         char status_text[256];
@@ -325,10 +581,10 @@ void draw_status_bar(SDL_Renderer *renderer, TTF_Font *font, int my_player_id) {
             status_color = (SDL_Color){255, 255, 0, 255};
         } else if (current_state.game_status == GAME_RUNNING) {
             status_str = "PLAYING";
-            status_color = (SDL_Color){0, 255, 0, 255};
+            status_color = (SDL_Color){0, 255, 100, 255};
         } else if (current_state.game_status == GAME_ENDED) {
             status_str = "ENDED";
-            status_color = (SDL_Color){255, 0, 0, 255};
+            status_color = (SDL_Color){255, 100, 100, 255};
         }
         
         snprintf(status_text, sizeof(status_text), 
@@ -352,7 +608,7 @@ void draw_status_bar(SDL_Renderer *renderer, TTF_Font *font, int my_player_id) {
             }
             char powerup_text[128];
             snprintf(powerup_text, sizeof(powerup_text), 
-                    "Bombs: %d/%d | Range: %d", 
+                    "💣 %d/%d | 🔥 %d", 
                     p->current_bombs, p->max_bombs, p->bomb_range);
             
             SDL_Surface *pu_surface = TTF_RenderText_Solid(font, powerup_text, 
@@ -370,121 +626,16 @@ void draw_status_bar(SDL_Renderer *renderer, TTF_Font *font, int my_player_id) {
     }
 }
 
-static void draw_sidebar(SDL_Renderer *renderer, TTF_Font *font, int my_player_id, int window_w, int window_h) {
-    int sidebar_x = MAP_WIDTH * TILE_SIZE + SIDEBAR_PADDING;
-    int sidebar_w = window_w - sidebar_x - SIDEBAR_PADDING;
-    if (sidebar_w < 140) return;
-
-    SDL_Rect bg = {sidebar_x - SIDEBAR_PADDING, 0, sidebar_w + SIDEBAR_PADDING, window_h};
-    SDL_SetRenderDrawColor(renderer, 18, 18, 18, 255);
-    SDL_RenderFillRect(renderer, &bg);
-
-    int y = SIDEBAR_PADDING;
-    SDL_Color player_colors[] = {COLOR_PLAYER1, COLOR_PLAYER2, COLOR_PLAYER3, COLOR_PLAYER4};
-
-    // --- Profile ---
-    draw_text(renderer, font, my_username, sidebar_x, y, COLOR_TEXT_PRIMARY);
-    y += LINE_HEIGHT + LINE_GAP;
-    // Derive tier from ELO if available
-    const char *tier_name = "Bronze";
-    int my_elo = 0;
-    if (my_player_id >= 0 && my_player_id < current_state.num_players) {
-        my_elo = current_state.players[my_player_id].elo_rating;
-    }
-    if (my_elo >= 2000) tier_name = "Diamond";
-    else if (my_elo >= 1500) tier_name = "Gold";
-    else if (my_elo >= 1000) tier_name = "Silver";
-    char profile_line[128];
-    snprintf(profile_line, sizeof(profile_line), "Rank: %s", tier_name);
-    draw_text(renderer, font, profile_line, sidebar_x, y, COLOR_TEXT_MUTED);
-    y += LINE_HEIGHT;
-    snprintf(profile_line, sizeof(profile_line), "ELO: %d", my_elo);
-    draw_text(renderer, font, profile_line, sidebar_x, y, COLOR_TEXT_MUTED);
-    y += LINE_HEIGHT + SECTION_GAP_SMALL;
-    draw_divider(renderer, sidebar_x, y, sidebar_w - SIDEBAR_PADDING);
-    y += LINE_GAP;
-
-    // --- Room summary ---
-    draw_text(renderer, font, "Room", sidebar_x, y, COLOR_TEXT_ACCENT);
-    y += LINE_HEIGHT;
-    if (current_lobby.id >= 0) {
-        char line[160];
-        snprintf(line, sizeof(line), "%s", current_lobby.name);
-        draw_text(renderer, font, line, sidebar_x, y, COLOR_TEXT_PRIMARY);
-        y += LINE_HEIGHT;
-        if (current_lobby.is_private) {
-            draw_text(renderer, font, "Private", sidebar_x, y, COLOR_TEXT_MUTED);
-            y += LINE_HEIGHT;
-        } else {
-            draw_text(renderer, font, "Public", sidebar_x, y, COLOR_TEXT_MUTED);
-            y += LINE_HEIGHT;
-        }
-        if (current_lobby.is_private && current_lobby.access_code[0]) {
-            snprintf(line, sizeof(line), "Code: %s", current_lobby.access_code);
-            draw_text(renderer, font, line, sidebar_x, y, COLOR_TEXT_MUTED);
-            y += LINE_HEIGHT;
-        }
-    } else {
-        draw_text(renderer, font, "No room info", sidebar_x, y, COLOR_TEXT_MUTED);
-        y += LINE_HEIGHT;
-    }
-    y += SECTION_GAP;
-    draw_divider(renderer, sidebar_x, y, sidebar_w - SIDEBAR_PADDING);
-    y += LINE_GAP;
-
-    // --- Match ---
-    extern Uint32 match_start_time;
-    Uint32 now = SDL_GetTicks();
-    int elapsed = match_start_time ? (int)((now - match_start_time) / 1000) : 0;
-    int alive = 0;
-    for (int i = 0; i < current_state.num_players; i++) if (current_state.players[i].is_alive) alive++;
-
-    draw_text(renderer, font, "Match", sidebar_x, y, COLOR_TEXT_ACCENT);
-    y += LINE_HEIGHT;
-    char info[128];
-    snprintf(info, sizeof(info), "Time: %02d:%02d", elapsed/60, elapsed%60);
-    draw_text(renderer, font, info, sidebar_x, y, COLOR_TEXT_MUTED); y += LINE_HEIGHT + LINE_GAP;
-    snprintf(info, sizeof(info), "Alive: %d/%d", alive, current_state.num_players);
-    draw_text(renderer, font, info, sidebar_x, y, alive > 1 ? COLOR_TEXT_OK : COLOR_TEXT_BAD); y += LINE_HEIGHT;
-    y += SECTION_GAP;
-    draw_divider(renderer, sidebar_x, y, sidebar_w - SIDEBAR_PADDING);
-    y += LINE_GAP;
-
-    // --- Players ---
-    draw_text(renderer, font, "Players", sidebar_x, y, COLOR_TEXT_ACCENT);
-    y += LINE_HEIGHT;
-    for (int i = 0; i < current_state.num_players; i++) {
-        Player *p = &current_state.players[i];
-        SDL_Color c = p->is_alive ? player_colors[i % 4] : COLOR_TEXT_MUTED;
-        SDL_Rect swatch = {sidebar_x, y + 4, 10, 10};
-        SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, c.a);
-        SDL_RenderFillRect(renderer, &swatch);
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-        SDL_RenderDrawRect(renderer, &swatch);
-
-        char line[120];
-        snprintf(line, sizeof(line), " %s", p->username);
-        draw_text(renderer, font, line, sidebar_x + 14, y, c);
-        const char *status = p->is_alive ? "A" : "X";
-        SDL_Color status_color = p->is_alive ? COLOR_TEXT_OK : COLOR_TEXT_BAD;
-        int status_x = sidebar_x + sidebar_w - 20;
-        draw_text(renderer, font, status, status_x, y, status_color);
-        y += LINE_HEIGHT;
-    }
-    y += SECTION_GAP;
-
-    // --- Recent events ---
-    // Recent feed removed per latest UX request
-}
-
-void render_game(SDL_Renderer *renderer, TTF_Font *font, int tick, int my_player_id) {
+void render_game(SDL_Renderer *renderer, TTF_Font *font, int tick, int my_player_id, int elapsed_seconds) {
+    // Update particles
+    update_particles();
+    
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
 
-    SDL_SetRenderDrawColor(renderer, COLOR_BACKGROUND.r, COLOR_BACKGROUND.g, 
-                          COLOR_BACKGROUND.b, COLOR_BACKGROUND.a);
+    // Enhanced background with gradient
     SDL_Rect bg = {0, 0, WINDOW_WIDTH, MAP_HEIGHT * TILE_SIZE};
-    SDL_RenderFillRect(renderer, &bg);
+    draw_vertical_gradient(renderer, bg, (SDL_Color){20, 100, 20, 255}, (SDL_Color){34, 139, 34, 255});
 
     for (int y = 0; y < MAP_HEIGHT; y++) {
         for (int x = 0; x < MAP_WIDTH; x++) {
@@ -517,37 +668,39 @@ void render_game(SDL_Renderer *renderer, TTF_Font *font, int tick, int my_player
 
     SDL_Color player_colors[] = {COLOR_PLAYER1, COLOR_PLAYER2, 
                                  COLOR_PLAYER3, COLOR_PLAYER4};
+
     for (int i = 0; i < current_state.num_players; i++) {
         draw_player(renderer, &current_state.players[i], 
                    player_colors[i % 4]);
     }
+    
+    // Render particles on top of everything
+    render_particles(renderer);
+    
+    // Render fog of war overlay (if in fog mode)
+    extern void draw_fog_overlay(SDL_Renderer*, GameState*, int);
+    draw_fog_overlay(renderer, &current_state, my_player_id);
 
-    draw_status_bar(renderer, font, my_player_id);
-
-    // Draw Leave button
-    SDL_SetRenderDrawColor(renderer, 200, 50, 50, 200);
-    SDL_RenderFillRect(renderer, &game_leave_btn);
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-    SDL_RenderDrawRect(renderer, &game_leave_btn);
-    if (font) {
-        SDL_Surface *surf = TTF_RenderText_Blended(font, "Leave Match", (SDL_Color){255,255,255,255});
-        if (surf) {
-            SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, surf);
-            SDL_Rect rect = {game_leave_btn.x + (game_leave_btn.w - surf->w)/2,
-                             game_leave_btn.y + (game_leave_btn.h - surf->h)/2,
-                             surf->w, surf->h};
-            SDL_RenderCopy(renderer, tex, NULL, &rect);
-            SDL_DestroyTexture(tex);
-            SDL_FreeSurface(surf);
-        }
+    // === HUD - Match Timer (Top Center) ===
+    int minutes = elapsed_seconds / 60;
+    int seconds = elapsed_seconds % 60;
+    char timer_text[32];
+    snprintf(timer_text, sizeof(timer_text), "%d:%02d", minutes, seconds);
+    
+    SDL_Color timer_color = {255, 255, 255, 255};  // White
+    SDL_Surface *timer_surf = TTF_RenderText_Blended(font, timer_text, timer_color);
+    if (timer_surf) {
+        SDL_Texture *timer_tex = SDL_CreateTextureFromSurface(renderer, timer_surf);
+        int timer_x = (WINDOW_WIDTH - timer_surf->w) / 2;  // Center horizontally
+        int timer_y = 20;  // Top of screen
+        SDL_Rect timer_rect = {timer_x, timer_y, timer_surf->w, timer_surf->h};
+        SDL_RenderCopy(renderer, timer_tex, NULL, &timer_rect);
+        SDL_DestroyTexture(timer_tex);
+        SDL_FreeSurface(timer_surf);
     }
 
+    draw_status_bar(renderer, font, my_player_id);
     draw_notifications(renderer, font);
-
-    // Sidebar on the right (uses actual window width)
-    int win_w, win_h;
-    SDL_GetRendererOutputSize(renderer, &win_w, &win_h);
-    draw_sidebar(renderer, font, my_player_id, win_w, win_h);
     //SDL_RenderPresent(renderer);
 }
 
@@ -557,9 +710,10 @@ TTF_Font* init_font() {
         return NULL;
     }
     
-    TTF_Font *font = TTF_OpenFont("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 18);
+    // LARGER FONT: 26pt (was 18pt)
+    TTF_Font *font = TTF_OpenFont("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 26);
     if (!font) {
-        font = TTF_OpenFont("C:\\Windows\\Fonts\\arial.ttf", 18);
+        font = TTF_OpenFont("C:\\Windows\\Fonts\\arial.ttf", 26);
     }
     
     if (!font) {
@@ -567,4 +721,41 @@ TTF_Font* init_font() {
     }
     
     return font;
+}
+
+// ===== FOG OF WAR OVERLAY =====
+void draw_fog_overlay(SDL_Renderer *renderer, GameState *state, int my_player_id) {
+    // No fog in non-fog-of-war modes
+    if (state->game_mode != GAME_MODE_FOG_OF_WAR) return;
+    
+    // Dead players see everything
+    if (my_player_id >= 0 && my_player_id < state->num_players) {
+        Player *my_player = &state->players[my_player_id];
+        if (!my_player->is_alive) return;  // Spectator view
+    }
+    
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    
+    for (int y = 0; y < MAP_HEIGHT; y++) {
+        for (int x = 0; x < MAP_WIDTH; x++) {
+            // Calculate if this tile should be visible (7x7 square)
+            int visible = 1;
+            if (my_player_id >= 0 && my_player_id < state->num_players) {
+                Player *p = &state->players[my_player_id];
+                int dist_x = abs(p->x - x);
+                int dist_y = abs(p->y - y);
+                // 7x7 square: 3 tiles in each direction from player
+                visible = (dist_x <= 3 && dist_y <= 3);
+            }
+            
+            if (!visible) {
+                // Draw dark overlay for unseen tiles
+                SDL_Rect fog_rect = {x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE};
+                SDL_SetRenderDrawColor(renderer, 0, 0, 0, 200);  // Dark overlay
+                SDL_RenderFillRect(renderer, &fog_rect);
+            }
+        }
+    }
+    
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 }

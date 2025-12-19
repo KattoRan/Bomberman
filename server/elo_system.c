@@ -36,7 +36,7 @@ int calculate_elo_change(int player_rating, int avg_opponent_rating,
 
 // Update ELO ratings for all players in a match
 // Returns 0 on success, -1 on failure
-int elo_update_after_match(int *player_ids, int *placements, int num_players) {
+int elo_update_after_match(int *player_ids, int *placements, int num_players, int *out_elo_changes) {
     if (num_players < 2) return -1;
     
     // Get current ratings and match counts
@@ -85,6 +85,11 @@ int elo_update_after_match(int *player_ids, int *placements, int num_players) {
         
         // Ensure rating doesn't go below 0
         if (new_rating < 0) new_rating = 0;
+
+        // Store change for output
+        if (out_elo_changes) {
+            out_elo_changes[i] = elo_change;
+        }
         
         // Update database
         if (db_update_elo(player_ids[i], new_rating) == 0) {
