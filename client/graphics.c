@@ -173,19 +173,6 @@ const SDL_Color COLOR_POWERUP_BOMB = {255, 215, 0, 255};
 const SDL_Color COLOR_POWERUP_FIRE = {255, 69, 0, 255};
 const SDL_Color COLOR_POWERUP_SPEED = {50, 205, 50, 255};
 
-// Text palette for sidebar
-static const SDL_Color COLOR_TEXT_PRIMARY = {237, 237, 237, 255}; // #EDEDED
-static const SDL_Color COLOR_TEXT_MUTED   = {168, 168, 168, 255}; // #A8A8A8
-static const SDL_Color COLOR_TEXT_ACCENT  = {205, 187, 138, 255}; // #CDBB8A
-static const SDL_Color COLOR_TEXT_OK      = {61, 220, 151, 255};  // #3DDC97
-static const SDL_Color COLOR_TEXT_BAD     = {220, 60, 60, 255};
-static const SDL_Color COLOR_DIVIDER      = {42, 42, 42, 255};    // #2A2A2A
-static const SDL_Color COLOR_BADGE_PRIVATE_BG = {34, 34, 34, 255}; // subtle badge
-static const SDL_Color COLOR_BADGE_PRIVATE_TX = {168, 168, 168, 255};
-
-// Leave button placement in game HUD
-static SDL_Rect game_leave_btn = {MAP_WIDTH * TILE_SIZE - 150, MAP_HEIGHT * TILE_SIZE + 10, 140, 30};
-
 // Hệ thống thông báo
 typedef struct {
     char text[128];
@@ -195,10 +182,6 @@ typedef struct {
 } Notification;
 
 Notification notifications[MAX_NOTIFICATIONS];
-
-// Simple event log (latest first)
-static char event_log[MAX_EVENTS][128];
-static int event_count = 0;
 
 void add_notification(const char *text, SDL_Color color) {
     for (int i = 0; i < MAX_NOTIFICATIONS; i++) {
@@ -211,53 +194,6 @@ void add_notification(const char *text, SDL_Color color) {
             break;
         }
     }
-}
-
-void add_event_log(const char *text) {
-    if (!text || !text[0]) return;
-    char trimmed[128];
-    size_t len = strlen(text);
-    if (len >= sizeof(trimmed)) len = sizeof(trimmed) - 1;
-    strncpy(trimmed, text, len);
-    trimmed[len] = '\0';
-    if (len > 60) {
-        // Truncate long lines
-        trimmed[57] = '.';
-        trimmed[58] = '.';
-        trimmed[59] = '.';
-        trimmed[60] = '\0';
-    }
-    // Shift down to make room for newest at index 0
-    for (int i = MAX_EVENTS - 1; i > 0; i--) {
-        strncpy(event_log[i], event_log[i - 1], sizeof(event_log[i]) - 1);
-        event_log[i][sizeof(event_log[i]) - 1] = '\0';
-    }
-    strncpy(event_log[0], trimmed, sizeof(event_log[0]) - 1);
-    event_log[0][sizeof(event_log[0]) - 1] = '\0';
-    if (event_count < MAX_EVENTS) event_count++;
-}
-
-// Expose leave button rect for input handling
-SDL_Rect get_game_leave_button_rect() {
-    return game_leave_btn;
-}
-
-// Draw text helper
-static void draw_text(SDL_Renderer *renderer, TTF_Font *font, const char *text, int x, int y, SDL_Color color) {
-    if (!font || !text) return;
-    SDL_Surface *surf = TTF_RenderText_Blended(font, text, color);
-    if (!surf) return;
-    SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, surf);
-    SDL_Rect rect = {x, y, surf->w, surf->h};
-    SDL_RenderCopy(renderer, tex, NULL, &rect);
-    SDL_DestroyTexture(tex);
-    SDL_FreeSurface(surf);
-}
-
-static void draw_divider(SDL_Renderer *renderer, int x, int y, int w) {
-    SDL_SetRenderDrawColor(renderer, COLOR_DIVIDER.r, COLOR_DIVIDER.g, COLOR_DIVIDER.b, COLOR_DIVIDER.a);
-    SDL_Rect line = {x, y, w, 1};
-    SDL_RenderFillRect(renderer, &line);
 }
 
 void draw_tile(SDL_Renderer *renderer, int x, int y, SDL_Color color, int draw_border) {
@@ -615,8 +551,7 @@ void draw_status_bar(SDL_Renderer *renderer, TTF_Font *font, int my_player_id) {
                                       (SDL_Color){255, 215, 0, 255});
             if (pu_surface) {
                 SDL_Texture *pu_texture = SDL_CreateTextureFromSurface(renderer, pu_surface);
-                // Shift left a bit to leave space for the leave button
-                SDL_Rect pu_rect = {WINDOW_WIDTH - pu_surface->w - 170, 
+                SDL_Rect pu_rect = {WINDOW_WIDTH - pu_surface->w - 10, 
                                    bar_y + 15, pu_surface->w, pu_surface->h};
                 SDL_RenderCopy(renderer, pu_texture, NULL, &pu_rect);
                 SDL_DestroyTexture(pu_texture);
@@ -668,7 +603,6 @@ void render_game(SDL_Renderer *renderer, TTF_Font *font, int tick, int my_player
 
     SDL_Color player_colors[] = {COLOR_PLAYER1, COLOR_PLAYER2, 
                                  COLOR_PLAYER3, COLOR_PLAYER4};
-
     for (int i = 0; i < current_state.num_players; i++) {
         draw_player(renderer, &current_state.players[i], 
                    player_colors[i % 4]);
