@@ -1,2 +1,10 @@
+# Build directories
 .kiro/
+
+# Object files
 *.o
+
+# Executables
+*.exe
+client_bin
+server_bin
