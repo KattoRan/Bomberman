@@ -67,13 +67,26 @@ void broadcast_lobby_update(int lobby_id) {
 }
 
 void broadcast_game_state(int lobby_id) {
-    ServerPacket packet;
-    packet.type = MSG_GAME_STATE;
-    packet.payload.game_state = active_games[lobby_id];
-
+    GameState *full_state = &active_games[lobby_id];
+    
+    // Send per-player filtered state in fog of war mode
     for (int i = 0; i < num_clients; i++) {
         if (clients[i].lobby_id == lobby_id && clients[i].is_authenticated) {
-             send_response(clients[i].socket_fd, &packet);
+            ServerPacket packet;
+            memset(&packet, 0, sizeof(ServerPacket));
+            packet.type = MSG_GAME_STATE;
+            
+            if (full_state->game_mode == GAME_MODE_FOG_OF_WAR) {
+                // Filter state for this specific player
+                GameState filtered_state;
+                filter_game_state(full_state, clients[i].player_id_in_game, &filtered_state);
+                packet.payload.game_state = filtered_state;
+            } else {
+                // Send full state for classic mode
+                packet.payload.game_state = *full_state;
+            }
+            
+            send_response(clients[i].socket_fd, &packet);
         }
     }
 }
@@ -205,7 +218,7 @@ void handle_client_packet(int socket_fd, ClientPacket *pkt) {
 
         case MSG_CREATE_LOBBY:
             if (!client->is_authenticated) break;
-            int lid = create_lobby(pkt->room_name, client->username, pkt->is_private, pkt->access_code);
+            int lid = create_lobby(pkt->room_name, client->username, pkt->is_private, pkt->access_code, pkt->game_mode);
             if (lid >= 0) {
                 client->lobby_id = lid;
                 response.type = MSG_LOBBY_UPDATE;

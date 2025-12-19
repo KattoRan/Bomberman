@@ -9,6 +9,7 @@
 #define BOMB_TIMER 3000
 #define EXPLOSION_TIMER 500
 #define POWERUP_CHANCE 30  // 30% cơ hội xuất hiện power-up
+#define FOG_RADIUS 5       // Fog of war visibility radius (5 tiles)
 
 // Power-up limits - ADJUSTED
 #define MAX_BOMB_CAPACITY 3   // User requested: max 3 bombs
@@ -99,6 +100,10 @@ void init_game(GameState *state, Lobby *lobby) {
     state->game_status = GAME_RUNNING;
     state->winner_id = -1;
     state->end_game_time = 0;
+    
+    // Initialize game mode and fog settings from lobby
+    state->game_mode = lobby->game_mode;
+    state->fog_radius = (lobby->game_mode == GAME_MODE_FOG_OF_WAR) ? FOG_RADIUS : 0;
     
     // Initialize timer
     state->match_start_time = time(NULL);  // Record start time
@@ -396,4 +401,63 @@ void update_game(GameState *state) {
                    state->match_duration_seconds);
         }
     }
+}
+
+// === FOG OF WAR FUNCTIONS ===
+
+// Check if a tile is visible to a specific player (7x7 square centered on player)
+int is_tile_visible(GameState *state, int player_id, int tile_x, int tile_y) {
+    // No fog in non-fog-of-war modes
+    if (state->game_mode != GAME_MODE_FOG_OF_WAR) return 1;
+    
+    // Safety check
+    if (player_id < 0 || player_id >= state->num_players) return 0;
+    
+    Player *p = &state->players[player_id];
+    
+    // Dead players see everything (spectator view)
+    if (!p->is_alive) return 1;
+    
+    // 7x7 square: player at center, so 3 tiles in each direction
+    int dist_x = abs(p->x - tile_x);
+    int dist_y = abs(p->y - tile_y);
+    
+    // Visible if within 3 tiles in both x and y directions (creates 7x7 square)
+    return (dist_x <= 3 && dist_y <= 3);
+}
+
+// Filter game state for a specific player (create per-player view with fog)
+void filter_game_state(GameState *full_state, int player_id, GameState *out_filtered) {
+    // Start with full copy
+    memcpy(out_filtered, full_state, sizeof(GameState));
+    
+    // No filtering needed in non-fog modes
+    if (full_state->game_mode != GAME_MODE_FOG_OF_WAR) return;
+    
+    // Filter map tiles
+    for (int y = 0; y < MAP_HEIGHT; y++) {
+        for (int x = 0; x < MAP_WIDTH; x++) {
+            if (!is_tile_visible(full_state, player_id, x, y)) {
+                // Hide unseen tiles (set to empty or keep hard walls for structure)
+                if (full_state->map[y][x] != WALL_HARD) {
+                    out_filtered->map[y][x] = EMPTY;
+                }
+            }
+        }
+    }
+    
+    // Filter other players - MOVE THEM OFF-MAP instead of marking dead
+    for (int i = 0; i < full_state->num_players; i++) {
+        if (i != player_id) {  // Don't hide yourself
+            Player *p = &full_state->players[i];
+            if (p->is_alive && !is_tile_visible(full_state, player_id, p->x, p->y)) {
+                // Hide this player by moving them off-map (don't change is_alive!)
+                out_filtered->players[i].x = -100;  // Off-map position
+                out_filtered->players[i].y = -100;
+            }
+        }
+    }
+    
+    printf("[FOG] Filtered game state for player %d (mode=%d, radius=7x7)\n", 
+           player_id, full_state->game_mode);
 }

@@ -693,7 +693,29 @@ int main(int argc, char *argv[]) {
                     if (show_create_room_dialog) {
                         if (e.type == SDL_MOUSEBUTTONDOWN) {
                             inp_room_name.is_active = is_mouse_inside(inp_room_name.rect, mx, my);
-inp_access_code.is_active = is_mouse_inside(inp_access_code.rect, mx, my);
+ inp_access_code.is_active = is_mouse_inside(inp_access_code.rect, mx, my);
+                            
+                            // Game mode buttons - calculate positions from render_create_room_dialog
+                            int win_w, win_h;
+                            SDL_GetRendererOutputSize(rend, &win_w, &win_h);
+                            int dialog_w = 700;
+                            int dialog_h = 650;
+                            int dialog_x = (win_w - dialog_w) / 2;
+                            int dialog_y = (win_h - dialog_h) / 2;
+                            int mode_y = dialog_y + 390;
+                            int btn_width = 180;
+                            int btn_spacing = 20;
+                            
+                            // Check each game mode button
+                            for (int i = 0; i < 3; i++) {
+                                int btn_x = dialog_x + 75 + i * (btn_width + btn_spacing);
+                                SDL_Rect mode_btn = {btn_x, mode_y, btn_width, 50};
+                                if (is_mouse_inside(mode_btn, mx, my)) {
+                                    selected_game_mode = i;  // 0=Classic, 1=Sudden Death, 2=Fog of War
+                                    printf("[CLIENT] Selected game mode: %d\n", selected_game_mode);
+                                    break;
+                                }
+                            }
                             
                             // Random button - generates 6-digit code
                             SDL_Rect btn_random = {inp_access_code.rect.x + inp_access_code.rect.w + 10, 
@@ -734,6 +756,7 @@ inp_access_code.is_active = is_mouse_inside(inp_access_code.rect, mx, my);
                                     pkt.type = MSG_CREATE_LOBBY;
                                     strncpy(pkt.room_name, inp_room_name.text, MAX_ROOM_NAME - 1);
                                     pkt.is_private = (code_len == 6) ? 1 : 0;
+                                    pkt.game_mode = selected_game_mode;  // Send selected game mode
                                     if (pkt.is_private) {
                                         strncpy(pkt.access_code, inp_access_code.text, 7);
                                     }
@@ -886,6 +909,28 @@ inp_access_code.is_active = is_mouse_inside(inp_access_code.rect, mx, my);
                         
                         if (pkt.data >= 0 || pkt.type == MSG_PLANT_BOMB) {
                             send(sock, &pkt, sizeof(pkt), 0);
+                        }
+                    }
+                    break;
+                
+                case SCREEN_POST_MATCH:
+                    if (e.type == SDL_MOUSEBUTTONDOWN) {
+                        // Post-match screen buttons
+                        printf("[CLIENT] Post-match click at (%d, %d)\n", mx, my);
+                        if (is_mouse_inside((SDL_Rect){660, 850, 250, 60}, mx, my)) {
+                            // Rematch - return to lobby room for another game
+                            printf("[CLIENT] Rematch button clicked - returning to lobby room\n");
+                            current_screen = SCREEN_LOBBY_ROOM;
+                            post_match_shown = 0;  // Reset for next match
+                            // Note: Players are still in the lobby, host can start another game
+                        }
+                        if (is_mouse_inside((SDL_Rect){930, 850, 250, 60}, mx, my)) {
+                            // Return to lobby list - LEAVE CURRENT LOBBY FIRST
+                            printf("[CLIENT] Return to lobby button clicked - leaving lobby and switching to LOBBY_LIST\n");
+                            send_packet(MSG_LEAVE_LOBBY, 0);  // Leave current lobby
+                            current_screen = SCREEN_LOBBY_LIST;
+                            send_packet(MSG_LIST_LOBBIES, 0);  // Request fresh lobby list
+                            post_match_shown = 0;  // Reset for next match
                         }
                     }
                     break;
@@ -1042,20 +1087,6 @@ inp_access_code.is_active = is_mouse_inside(inp_access_code.rect, mx, my);
                                     settings_active_tab = i;
                                     break;
                                 }
-                            }
-                        } else if (current_screen == SCREEN_POST_MATCH) {
-                            // Post-match screen buttons
-                            if (is_mouse_inside((SDL_Rect){660, 850, 250, 60}, mx, my)) {
-                                // Rematch - show notification
-                                snprintf(notification_message, sizeof(notification_message),
-                                        "Rematch system coming soon!");
-                                notification_time = SDL_GetTicks();
-                            }
-                            if (is_mouse_inside((SDL_Rect){930, 850, 250, 60}, mx, my)) {
-                                // Return to lobby list (not lobby room)
-                                current_screen = SCREEN_LOBBY_LIST;
-                                send_packet(MSG_LIST_LOBBIES, 0);
-                                post_match_shown = 0;  // Reset for next match
                             }
                         } else if (is_mouse_inside(back_rect, mx, my)) {
                             current_screen = SCREEN_LOBBY_LIST;

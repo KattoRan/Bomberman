@@ -956,7 +956,8 @@ void render_lobby_room_screen(SDL_Renderer *renderer, TTF_Font *font,
 void render_create_room_dialog(SDL_Renderer *renderer, TTF_Font *font,
                                 InputField *room_name, InputField *access_code,
                                 Button *create_btn, Button *cancel_btn) {
-    int win_w, win_h;
+    extern int selected_game_mode;  // Global from main.c
+   int win_w, win_h;
     SDL_GetRendererOutputSize(renderer, &win_w, &win_h);
     
     // Darken background
@@ -965,9 +966,9 @@ void render_create_room_dialog(SDL_Renderer *renderer, TTF_Font *font,
     SDL_Rect full_screen = {0, 0, win_w, win_h};
     SDL_RenderFillRect(renderer, &full_screen);
     
-    // LARGER Dialog box - 700x550 (was 500x400)
+    // LARGER Dialog box - 700x650 (increased height for game mode buttons)
     int dialog_w = 700;
-    int dialog_h = 550;
+    int dialog_h = 650;  // Increased from 550 to fit mode buttons
     int dialog_x = (win_w - dialog_w) / 2;
     int dialog_y = (win_h - dialog_h) / 2;
     
@@ -1038,6 +1039,62 @@ void render_create_room_dialog(SDL_Renderer *renderer, TTF_Font *font,
             SDL_RenderCopy(renderer, tex, NULL, &text_rect);
             SDL_DestroyTexture(tex);
             SDL_FreeSurface(btn_surf);
+        }
+    }
+    
+    // === GAME MODE SELECTION ===
+    SDL_Surface *mode_label = TTF_RenderText_Blended(font, "Game Mode:", CLR_WHITE);
+    if (mode_label) {
+        SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, mode_label);
+        SDL_Rect rect = {dialog_x + 75, dialog_y + 350, mode_label->w, mode_label->h};
+        SDL_RenderCopy(renderer, tex, NULL, &rect);
+        SDL_DestroyTexture(tex);
+        SDL_FreeSurface(mode_label);
+    }
+    
+    // Three mode buttons: Classic, Sudden Death, Fog of War
+    const char *mode_names[] = {"Classic", "Sudden Death", "Fog of War"};
+    int mode_y = dialog_y + 390;
+    int btn_width = 180;
+    int btn_spacing = 20;
+    
+    for (int i = 0; i < 3; i++) {
+        int btn_x = dialog_x + 75 + i * (btn_width + btn_spacing);
+        SDL_Rect mode_btn = {btn_x, mode_y, btn_width, 50};
+        
+        // Selected mode gets accent color, others get gray
+        SDL_Color btn_bg = (i == selected_game_mode) ? CLR_ACCENT : CLR_INPUT_BG;
+        SDL_Color btn_border = (i == selected_game_mode) ? CLR_ACCENT : CLR_GRAY;
+        
+        draw_layered_shadow(renderer, mode_btn, UI_CORNER_RADIUS, 3);
+        draw_rounded_rect(renderer, mode_btn, btn_bg, UI_CORNER_RADIUS);
+        draw_rounded_border(renderer, mode_btn, btn_border, UI_CORNER_RADIUS, (i == selected_game_mode) ? 2 : 1);
+        
+        // Checkmark for selected mode
+        if (i == selected_game_mode) {
+            SDL_Surface *check_surf = TTF_RenderText_Blended(font, "✓", CLR_SUCCESS);
+            if (check_surf) {
+                SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, check_surf);
+                SDL_Rect check_rect = {btn_x + 10, mode_y + (50 - check_surf->h) / 2, 
+                                       check_surf->w, check_surf->h};
+                SDL_RenderCopy(renderer, tex, NULL, &check_rect);
+                SDL_DestroyTexture(tex);
+                SDL_FreeSurface(check_surf);
+            }
+        }
+        
+        // Mode name
+        SDL_Surface *name_surf = TTF_RenderText_Blended(font, mode_names[i], CLR_WHITE);
+        if (name_surf) {
+            SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, name_surf);
+            SDL_Rect name_rect = {
+                btn_x + (btn_width - name_surf->w) / 2,
+                mode_y + (50 - name_surf->h) / 2,
+                name_surf->w, name_surf->h
+            };
+            SDL_RenderCopy(renderer, tex, NULL, &name_rect);
+            SDL_DestroyTexture(tex);
+            SDL_FreeSurface(name_surf);
         }
     }
     

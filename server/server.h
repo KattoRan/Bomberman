@@ -31,7 +31,7 @@ int db_update_elo(int user_id, int new_elo);
 
 // --- Lobby Functions ---
 void init_lobbies();
-int create_lobby(const char *room_name, const char *host_username, int is_private, const char *access_code);
+int create_lobby(const char *room_name, const char *host_username, int is_private, const char *access_code, int game_mode);
 int join_lobby(int lobby_id, const char *username);
 int join_lobby_with_code(int lobby_id, const char *username, const char *access_code);
 int leave_lobby(int lobby_id, const char *username);
@@ -46,6 +46,8 @@ void init_game(GameState *state, Lobby *lobby);
 void update_game(GameState *state);
 int handle_move(GameState *state, int player_id, int direction);
 int plant_bomb(GameState *state, int player_id);
+int is_tile_visible(GameState *state, int player_id, int tile_x, int tile_y);
+void filter_game_state(GameState *full_state, int player_id, GameState *out_filtered);
 
 // --- Friend System Functions ---
 int friend_send_request(int sender_id, const char *target_display_name);
