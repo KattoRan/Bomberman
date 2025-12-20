@@ -596,9 +596,9 @@ void render_lobby_list_screen(SDL_Renderer *renderer, TTF_Font *font,
     
     // FIXED lobby cards for 1120x720
     int y = 120;  // Fixed from top
-    int list_width = 616;  // Fixed width (55% of 1120)
-    int card_height = 50;  // Fixed height
-    int start_x = 252;  // Centered: (1120-616)/2
+    int list_width = 640;  // Fixed width
+    int card_height = 80;  // Fixed height
+    int start_x = 240;  // Centered: (1120-640)/2
 
     for (int i = 0; i < lobby_count; i++) {
         SDL_Rect lobby_rect = {start_x, y, list_width, card_height};
@@ -662,7 +662,7 @@ void render_lobby_list_screen(SDL_Renderer *renderer, TTF_Font *font,
                     player_surf->w, player_surf->h
                 };
                 SDL_RenderCopy(renderer, tex, NULL, &rect);
-        SDL_DestroyTexture(tex);
+                SDL_DestroyTexture(tex);
                 SDL_FreeSurface(player_surf);
             }
             

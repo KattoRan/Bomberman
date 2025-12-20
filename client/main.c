@@ -66,12 +66,12 @@ Button btn_login = {{335, 560, 180, 60}, "Login",    0, BTN_PRIMARY};
 Button btn_reg   = {{605, 560, 180, 60}, "Register", 0, BTN_PRIMARY};
 
 // Lobby list buttons - BOTTOM CENTER, adjusted for 1120x720
-Button btn_create     = {{200, 600, 220, 60}, "Create Room", 0 , BTN_PRIMARY};
-Button btn_refresh    = {{440, 600, 220, 60}, "Refresh", 0 , BTN_PRIMARY};
-Button btn_friends    = {{680, 600, 220, 60}, "Friends", 0, BTN_PRIMARY};
-Button btn_quick_play = {{880, 600, 200, 60}, "Quick Play", 0, BTN_PRIMARY};
-Button btn_profile     = {{830, 20, 130, 50}, "Profile", 0, BTN_PRIMARY};
-Button btn_leaderboard = {{930, 20, 120, 50}, "Top", 0, BTN_PRIMARY};
+Button btn_create     = {{250, 620, 200, 60}, "Create Room", 0 , BTN_PRIMARY};
+Button btn_refresh    = {{460, 620, 200, 60}, "Refresh", 0 , BTN_PRIMARY};
+Button btn_friends    = {{670, 620, 200, 60}, "Friends", 0, BTN_PRIMARY};
+Button btn_quick_play = {{880, 620, 200, 60}, "Quick Play", 0, BTN_PRIMARY};
+Button btn_profile     = {{850, 20, 130, 50}, "Profile", 0, BTN_PRIMARY};
+Button btn_leaderboard = {{1000, 20, 80, 50}, "Top", 0, BTN_OUTLINE};
 
 
 // Lobby room buttons
@@ -117,7 +117,7 @@ int delete_friend_index = -1;
 
 // Settings screen state
 int settings_active_tab = 0;  // 0=Graphics, 1=Controls, 2=Account
-Button btn_settings = {{20, 600, 200, 60}, "Settings", 0};
+Button btn_settings = {{40, 620, 200, 60}, "Settings", 0};
 Button btn_settings_apply = {{0, 0, 200, 60}, "Apply", 0};
 
 // Post-match screen state  
@@ -661,10 +661,10 @@ int main(int argc, char *argv[]) {
                         }
                         
                         // Lobby click detection - MUST MATCH ui_screens.c coordinates
-                        int list_width = 616;  // Fixed width from ui_screens.c
-                        int start_x = 252;      // Centered: (1120-616)/2
-                        int y = 108;            // Fixed from top (matches rendering)
-                        int card_height = 50;   // Card height from ui_screens.c
+                        int y = 120;  // Fixed from top
+                        int list_width = 640;  // Fixed width
+                        int card_height = 80;  // Fixed height
+                        int start_x = 240;  // Centered: (1120-640)/2
                         
                         for (int i = 0; i < lobby_count; i++) {
                             SDL_Rect r = {start_x, y, list_width, card_height};
