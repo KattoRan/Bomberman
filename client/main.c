@@ -62,27 +62,27 @@ int leaderboard_count = 0;
 InputField inp_user  = {{335, 240, 450, 65}, "", "Username:", 0, 30};
 InputField inp_email = {{335, 340, 450, 65}, "", "Email:",    0, 127};
 InputField inp_pass  = {{335, 440, 450, 65}, "", "Password:", 0, 30};
-Button btn_login = {{335, 560, 180, 60}, "Login",    0};
-Button btn_reg   = {{605, 560, 180, 60}, "Register", 0};
+Button btn_login = {{335, 560, 180, 60}, "Login",    0, BTN_PRIMARY};
+Button btn_reg   = {{605, 560, 180, 60}, "Register", 0, BTN_PRIMARY};
 
 // Lobby list buttons - BOTTOM CENTER, adjusted for 1120x720
-Button btn_create     = {{200, 600, 220, 60}, "Create Room", 0};
-Button btn_refresh    = {{440, 600, 220, 60}, "Refresh", 0};
-Button btn_friends    = {{680, 600, 220, 60}, "Friends", 0};
-Button btn_quick_play = {{880, 600, 200, 60}, "Quick Play", 0};
-Button btn_profile     = {{830, 20, 130, 50}, "Profile", 0};
-Button btn_leaderboard = {{930, 20, 120, 50}, "Top", 0};
+Button btn_create     = {{200, 600, 220, 60}, "Create Room", 0 , BTN_PRIMARY};
+Button btn_refresh    = {{440, 600, 220, 60}, "Refresh", 0 , BTN_PRIMARY};
+Button btn_friends    = {{680, 600, 220, 60}, "Friends", 0, BTN_PRIMARY};
+Button btn_quick_play = {{880, 600, 200, 60}, "Quick Play", 0, BTN_PRIMARY};
+Button btn_profile     = {{830, 20, 130, 50}, "Profile", 0, BTN_PRIMARY};
+Button btn_leaderboard = {{930, 20, 120, 50}, "Top", 0, BTN_PRIMARY};
 
 
 // Lobby room buttons
-Button btn_ready = {{260, 600, 220, 60}, "Ready", 0};
-Button btn_start = {{500, 600, 300, 60}, "Start Game", 0};
-Button btn_leave = {{820, 600, 220, 60}, "Leave", 0};
+Button btn_ready = {{260, 600, 220, 60}, "Ready", 0, BTN_PRIMARY};
+Button btn_start = {{500, 600, 300, 60}, "Start Game", 0, BTN_PRIMARY};
+Button btn_leave = {{820, 600, 220, 60}, "Leave", 0, BTN_DANGER};
 
 
 // Lobby room - host-only buttons
-Button btn_lock_room = {{900, 100, 180, 50}, "Lock Room", 0};
-Button btn_chat      = {{900, 160, 180, 50}, "Chat", 0};
+// Button btn_lock_room = {{900, 100, 180, 50}, "Lock Room", 0};
+// Button btn_chat      = {{900, 160, 180, 50}, "💬", 0};
 // Kick buttons will be positioned per-player dynamically
 
 // Game mode selection
@@ -93,8 +93,8 @@ InputField inp_room_name   = {{335, 260, 450, 60}, "", "Room Name:", 0, 63};
 InputField inp_access_code = {{335, 350, 350, 60}, "", "Access Code (6 digits, optional):", 0, 6};
 int show_create_room_dialog = 0;
 int creating_private_room = 0;
-Button btn_create_confirm = {{370, 440, 220, 60}, "Create", 0};
-Button btn_cancel         = {{620, 440, 220, 60}, "Cancel", 0};
+Button btn_create_confirm = {{370, 440, 220, 60}, "Create", 0, BTN_PRIMARY};
+Button btn_cancel         = {{620, 440, 220, 60}, "Cancel", 0, BTN_DANGER};
 
 // Notification system
 char notification_message[256] = "";
@@ -857,14 +857,14 @@ int main(int argc, char *argv[]) {
                         }
                         // Lock Room button (host only)
                         else if (my_player_id == current_lobby.host_id && 
-                                is_mouse_inside((SDL_Rect){900, 100, 180, 50}, mx, my)) {
+                                is_mouse_inside((SDL_Rect){803, 15, 180, 50}, mx, my)) {
                             // Toggle lock - show notification (backend not implemented)
                             snprintf(notification_message, sizeof(notification_message),
                                     "Room locking coming soon!");
                             notification_time = SDL_GetTicks();
                         }
                         // Chat button
-                        else if (is_mouse_inside((SDL_Rect){900, 160, 180, 50}, mx, my)) {
+                        else if (is_mouse_inside((SDL_Rect){993, 15, 90, 50}, mx, my)) {
                             // Open chat - show notification (backend not implemented)
                             snprintf(notification_message, sizeof(notification_message),
                                     "Chat system coming soon!");
@@ -873,7 +873,7 @@ int main(int argc, char *argv[]) {
                         // Kick buttons (host only, check for each player)
                         else if (my_player_id == current_lobby.host_id) {
                             int card_y = 200;
-                            int card_width = 850;
+                            int card_width = 616;
                             int start_x = (1120 - card_width) / 2;
                             
                             for (int i = 0; i < current_lobby.num_players; i++) {

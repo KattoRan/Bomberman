@@ -7,10 +7,17 @@
 #include "../common/protocol.h"
 
 // Định nghĩa Struct Button
-typedef struct {
+typedef enum {
+    BTN_PRIMARY,
+    BTN_DANGER,
+    BTN_OUTLINE
+} ButtonType;
+
+typedef struct Button {
     SDL_Rect rect;
     char text[64];
     int is_hovered;
+    ButtonType type;
 } Button;
 
 // Định nghĩa Struct InputField
@@ -45,10 +52,12 @@ void render_lobby_list_screen(SDL_Renderer *renderer, TTF_Font *font,
                               Button *create_btn, Button *refresh_btn,
                               int selected_lobby);
 
+
 void render_lobby_room_screen(SDL_Renderer *renderer, TTF_Font *font,
                               Lobby *lobby, int my_player_id,
                               Button *ready_btn, Button *start_btn, 
                               Button *leave_btn);
+
 
 void render_friends_screen(SDL_Renderer *renderer, TTF_Font *font,
                            FriendInfo *friends, int friend_count,
