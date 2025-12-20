@@ -24,7 +24,7 @@ extern const SDL_Color CLR_DANGER;
 #define UI_CORNER_RADIUS 8
 #define UI_SHADOW_OFFSET 4
 
-// FIXED LAYOUT FOR 1920x1080 - removed all responsive code
+// FIXED LAYOUT FOR 1120x720 - removed all responsive code
 
 extern int get_button_width(int screen_w);
 extern int get_button_height(int screen_h);
@@ -280,8 +280,8 @@ void render_friends_screen(SDL_Renderer *renderer, TTF_Font *font,
     
     // Note: Input field and button rendered separately in main.c
     
-    // LARGER back button - bottom center
-    back_btn->rect = (SDL_Rect){860, 950, 200, 60};  // Increased size
+    // LARGER back button - bottom center, adjusted for 1120x720
+    back_btn->rect = (SDL_Rect){860, 650, 200, 60};  // Increased size
     strcpy(back_btn->text, "Back");
     draw_button(renderer, font, back_btn);
 }
@@ -410,8 +410,8 @@ void render_profile_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Fon
         }
     }
     
-    // LARGER back button - bottom center
-    back_btn->rect = (SDL_Rect){860, 950, 200, 60};
+    // LARGER back button - bottom center, adjusted for 1120x720
+    back_btn->rect = (SDL_Rect){860, 650, 200, 60};
     strcpy(back_btn->text, "Back");
     draw_button(renderer, font_small, back_btn);
 }
@@ -445,12 +445,12 @@ void render_leaderboard_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF
         SDL_FreeSurface(surf);
     }
     
-    // FIXED leaderboard for 1920x1080
-    int y = 173;  // 16% of 1080
+    // FIXED leaderboard for 1120x720
+    int y = 173;  // 16% of 720
     int max_entries = entry_count < 10 ? entry_count : 10;
-    int row_width = 1056;  // 55% of 1920
+    int row_width = 616;  // 55% of 1120
     int row_height = 65;  // Fixed height
-    int start_x = 432;  // Centered
+    int start_x = 252;  // Centered
     
     // Medal colors for top 3
     SDL_Color medal_colors[3] = {
@@ -643,7 +643,7 @@ void render_settings_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Fo
         content_y += 50;
         
         // Resolution
-        surf = TTF_RenderText_Blended(font_small, "Resolution: 1920x1080", CLR_WHITE);
+        surf = TTF_RenderText_Blended(font_small, "Resolution: 1120x720", CLR_WHITE);
         if (surf) {
             SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, surf);
             SDL_Rect rect = {content_x, content_y, surf->w, surf->h};

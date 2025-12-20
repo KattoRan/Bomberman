@@ -71,12 +71,18 @@ const SDL_Color CLR_GLOW = {255, 255, 255, 60};           // Glow hover
 const SDL_Color CLR_SHADOW_SOFT = {0, 0, 0, 30};           // Soft shadows
 const SDL_Color CLR_SHADOW_HARD = {0, 0, 0, 80};           // Hard shadows
 
-// --- FIXED LAYOUT FOR 1920x1080 FULLSCREEN ---
-#define FIXED_BUTTON_WIDTH 200
-#define FIXED_BUTTON_HEIGHT 50
-#define FIXED_SPACING 20
-#define FIXED_INPUT_WIDTH 400
-#define FIXED_INPUT_HEIGHT 50
+// --- FIXED LAYOUT FOR 1120x720 FULLSCREEN ---
+// #define FIXED_BUTTON_WIDTH 200
+// #define FIXED_BUTTON_HEIGHT 50
+// #define FIXED_SPACING 20
+// #define FIXED_INPUT_WIDTH 400
+// #define FIXED_INPUT_HEIGHT 50
+#define FIXED_BUTTON_WIDTH   180
+#define FIXED_BUTTON_HEIGHT   50
+#define FIXED_SPACING         16
+#define FIXED_INPUT_WIDTH    380
+#define FIXED_INPUT_HEIGHT    50
+
 
 // FIXED button dimensions - no responsive
 int get_button_width(int screen_w) {
@@ -453,21 +459,21 @@ void render_login_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Font 
         }
     }
 
-    // Input field positions already set in main.c (685, 350/450/550, 550x65)
+    // Input field positions already set in main.c (335, 350/450/550, 450x65)
     // Just draw them
     int is_registration = (email != NULL);
     
     draw_input_field(renderer, font_small, username);
     if (is_registration) {
         // Adjust password Y for registration mode
-        password->rect.y = 650;  // More space for email field
+        password->rect.y = 440;  // More space for email field
         draw_input_field(renderer, font_small, email);
     } else {
-        password->rect.y = 550;  // Standard login spacing
+        password->rect.y = 360;  // Standard login spacing
     }
     draw_input_field(renderer, font_small, password);
 
-    // Button positions already set in main.c (760/970, 680, 180x60)
+    // Button positions already set in main.c (410/630, 540, 180x60)
     // Set button labels based on mode
     if (is_registration) {
         strcpy(login_btn->text, "Back");
@@ -484,19 +490,32 @@ void render_login_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Font 
     if (font_small && message && strlen(message) > 0) {
         SDL_Surface *surf = TTF_RenderText_Blended(font_small, message, CLR_DANGER);
         if (surf) {
-            SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, surf);
-            SDL_Rect rect = {
-                center_x - surf->w / 2,
-                800,
-                surf->w, 
-                surf->h
-            };
-            SDL_RenderCopy(renderer, tex, NULL, &rect);
-            SDL_DestroyTexture(tex);
-            SDL_FreeSurface(surf);
+            if (is_registration) {
+                // Position below register button
+                SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, surf);
+                SDL_Rect rect = {
+                    center_x - surf->w / 2,
+                    160,
+                    surf->w, 
+                    surf->h
+                };
+                SDL_RenderCopy(renderer, tex, NULL, &rect);
+                SDL_DestroyTexture(tex);
+                SDL_FreeSurface(surf);
+            } else {
+                SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, surf);
+                SDL_Rect rect = {
+                    center_x - surf->w / 2,
+                    460,
+                    surf->w, 
+                    surf->h
+                };
+                SDL_RenderCopy(renderer, tex, NULL, &rect);
+                SDL_DestroyTexture(tex);
+                SDL_FreeSurface(surf);
+            }
         }
     }
-    
     //SDL_RenderPresent(renderer);
 }
 
@@ -534,11 +553,11 @@ void render_lobby_list_screen(SDL_Renderer *renderer, TTF_Font *font,
         }
     }
     
-    // FIXED lobby cards for 1920x1080
-    int y = 162;  // Fixed from top
-    int list_width = 1056;  // Fixed width (55% of 1920)
-    int card_height = 75;  // Fixed height
-    int start_x = 432;  // Centered: (1920-1056)/2
+    // FIXED lobby cards for 1120x720
+    int y = 108;  // Fixed from top
+    int list_width = 616;  // Fixed width (55% of 1120)
+    int card_height = 50;  // Fixed height
+    int start_x = 252;  // Centered: (1120-616)/2
 
     for (int i = 0; i < lobby_count; i++) {
         SDL_Rect lobby_rect = {start_x, y, list_width, card_height};
@@ -674,7 +693,7 @@ void render_lobby_room_screen(SDL_Renderer *renderer, TTF_Font *font,
         // Host-only buttons (Lock Room, Chat) - top right
         if (my_player_id == lobby->host_id) {
             // Lock Room button
-            SDL_Rect lock_btn = {1620, 100, 180, 50};
+            SDL_Rect lock_btn = {900, 100, 180, 50};
             SDL_Color lock_bg = lobby->is_locked ? CLR_DANGER : CLR_PRIMARY;
             const char *lock_text = lobby->is_locked ? "Unlock" : "Lock Room";
             
@@ -695,7 +714,7 @@ void render_lobby_room_screen(SDL_Renderer *renderer, TTF_Font *font,
         }
         
         // Chat button (for everyone)
-        SDL_Rect chat_btn = {1620, 170, 180, 50};
+        SDL_Rect chat_btn = {900, 160, 180, 50};
         draw_layered_shadow(renderer, chat_btn, UI_CORNER_RADIUS, 3);
         draw_rounded_rect(renderer, chat_btn, CLR_INPUT_BG, UI_CORNER_RADIUS);
         draw_rounded_border(renderer, chat_btn, CLR_PRIMARY, UI_CORNER_RADIUS, 1);
