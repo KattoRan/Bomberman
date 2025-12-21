@@ -5,9 +5,9 @@
 #include <stdlib.h>
 #include "../common/protocol.h"
 
-#define TILE_SIZE 40
+#define TILE_SIZE 50
 #define WINDOW_WIDTH (MAP_WIDTH * TILE_SIZE)
-#define WINDOW_HEIGHT (MAP_HEIGHT * TILE_SIZE + 50)
+#define WINDOW_HEIGHT (MAP_HEIGHT * TILE_SIZE + 70)
 #define MAX_NOTIFICATIONS 5
 #define MAX_PARTICLES 200
 
@@ -491,7 +491,7 @@ void draw_notifications(SDL_Renderer *renderer, TTF_Font *font) {
 void draw_status_bar(SDL_Renderer *renderer, TTF_Font *font, int my_player_id) {
     int bar_y = MAP_HEIGHT * TILE_SIZE;
     
-    SDL_Rect status_bg = {0, bar_y, WINDOW_WIDTH, 50};
+    SDL_Rect status_bg = {0, bar_y, WINDOW_WIDTH, 75};
     // Gradient background for status bar
     draw_vertical_gradient(renderer, status_bg, (SDL_Color){40, 40, 50, 255}, (SDL_Color){25, 25, 35, 255});
     
@@ -544,7 +544,7 @@ void draw_status_bar(SDL_Renderer *renderer, TTF_Font *font, int my_player_id) {
             }
             char powerup_text[128];
             snprintf(powerup_text, sizeof(powerup_text), 
-                    "💣 %d/%d | 🔥 %d", 
+                    "Bomb %d/%d | Fire %d", 
                     p->current_bombs, p->max_bombs, p->bomb_range);
             
             SDL_Surface *pu_surface = TTF_RenderText_Solid(font, powerup_text, 

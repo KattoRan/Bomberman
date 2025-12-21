@@ -279,7 +279,7 @@ void process_server_packet(ServerPacket *pkt) {
             
             if (current_lobby.status == LOBBY_PLAYING) {
                 if (current_screen != SCREEN_GAME) {
-                    add_notification("Game đã bắt đầu!", (SDL_Color){0, 255, 0, 255});
+                    add_notification("Game started!", (SDL_Color){0, 255, 0, 255});
                     game_start_time = SDL_GetTicks();  // Start the timer
                 }
                 current_screen = SCREEN_GAME;
@@ -307,16 +307,16 @@ void process_server_packet(ServerPacket *pkt) {
                     
                     char msg[128];
                     if (current_state.winner_id == 0) {
-                        snprintf(msg, sizeof(msg), "🎉 Chúc mừng! Bạn đã chiến thắng! 🎉");
+                        snprintf(msg, sizeof(msg), "Congratulations! You Win!");
                         add_notification(msg, (SDL_Color){0, 255, 0, 255});
                     } else {
-                        snprintf(msg, sizeof(msg), "%s đã chiến thắng!", 
+                        snprintf(msg, sizeof(msg), "%s has won!", 
                                 current_state.players[current_state.winner_id].username);
                         add_notification(msg, (SDL_Color){255, 215, 0, 255});
                     }
                 } else {
                     printf("║      Draw!                 ║\n");
-                    add_notification("Trận đấu hòa!", (SDL_Color){200, 200, 200, 255});
+                    add_notification("Match draw!", (SDL_Color){200, 200, 200, 255});
                 }
                 printf("╚═══════════════════════╝\n\n");
                 
@@ -926,14 +926,14 @@ int main(int argc, char *argv[]) {
                     if (e.type == SDL_MOUSEBUTTONDOWN) {
                         // Post-match screen buttons
                         printf("[CLIENT] Post-match click at (%d, %d)\n", mx, my);
-                        if (is_mouse_inside((SDL_Rect){660, 850, 250, 60}, mx, my)) {
+                        if (is_mouse_inside((SDL_Rect){300, 480, 240, 60}, mx, my)) {
                             // Rematch - return to lobby room for another game
                             printf("[CLIENT] Rematch button clicked - returning to lobby room\n");
                             current_screen = SCREEN_LOBBY_ROOM;
                             post_match_shown = 0;  // Reset for next match
                             // Note: Players are still in the lobby, host can start another game
                         }
-                        if (is_mouse_inside((SDL_Rect){930, 850, 250, 60}, mx, my)) {
+                        if (is_mouse_inside((SDL_Rect){580, 480, 240, 60}, mx, my)) {
                             // Return to lobby list - LEAVE CURRENT LOBBY FIRST
                             printf("[CLIENT] Return to lobby button clicked - leaving lobby and switching to LOBBY_LIST\n");
                             send_packet(MSG_LEAVE_LOBBY, 0);  // Leave current lobby

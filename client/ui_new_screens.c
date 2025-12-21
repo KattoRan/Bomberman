@@ -859,11 +859,11 @@ void render_post_match_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_
     }
     
     // Buttons
-    rematch_btn->rect = (SDL_Rect){660, 850, 250, 60};
+    rematch_btn->rect = (SDL_Rect){300, 480, 240, 60};
     strcpy(rematch_btn->text, "Rematch");
     draw_button(renderer, font_small, rematch_btn);
     
-    lobby_btn->rect = (SDL_Rect){930, 850, 250, 60};
+    lobby_btn->rect = (SDL_Rect){580, 480, 240, 60};
     strcpy(lobby_btn->text, "Return to Lobby");
     draw_button(renderer, font_small, lobby_btn);
 }
