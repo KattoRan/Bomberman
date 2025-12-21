@@ -7,10 +7,17 @@
 #include "../common/protocol.h"
 
 // Định nghĩa Struct Button
-typedef struct {
+typedef enum {
+    BTN_PRIMARY,
+    BTN_DANGER,
+    BTN_OUTLINE
+} ButtonType;
+
+typedef struct Button {
     SDL_Rect rect;
     char text[64];
     int is_hovered;
+    ButtonType type;
 } Button;
 
 // Định nghĩa Struct InputField
@@ -33,6 +40,7 @@ void draw_input_field(SDL_Renderer *renderer, TTF_Font *font, InputField *field)
 void draw_rounded_rect(SDL_Renderer *renderer, SDL_Rect rect, SDL_Color color, int radius);
 void draw_rounded_border(SDL_Renderer *renderer, SDL_Rect rect, SDL_Color color, int radius, int thickness);
 void draw_layered_shadow(SDL_Renderer *renderer, SDL_Rect rect, int radius, int offset);
+void draw_background_grid(SDL_Renderer *renderer, int w, int h);
 
 // Khai báo các hàm UI (Prototype)
 void render_login_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Font *font_small, 
@@ -45,10 +53,12 @@ void render_lobby_list_screen(SDL_Renderer *renderer, TTF_Font *font,
                               Button *create_btn, Button *refresh_btn,
                               int selected_lobby);
 
+
 void render_lobby_room_screen(SDL_Renderer *renderer, TTF_Font *font,
                               Lobby *lobby, int my_player_id,
                               Button *ready_btn, Button *start_btn, 
                               Button *leave_btn);
+
 
 void render_friends_screen(SDL_Renderer *renderer, TTF_Font *font,
                            FriendInfo *friends, int friend_count,
@@ -56,11 +66,11 @@ void render_friends_screen(SDL_Renderer *renderer, TTF_Font *font,
                            FriendInfo *sent, int sent_count,
                            Button *back_btn);
 
-void render_profile_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Font *font_small,
+void render_profile_screen(SDL_Renderer *renderer, TTF_Font *font_medium, TTF_Font *font_small,
                            ProfileData *profile,
                            Button *back_btn);
 
-void render_leaderboard_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Font *font_small,
+void render_leaderboard_screen(SDL_Renderer *renderer, TTF_Font *font_medium, TTF_Font *font_small,
                                LeaderboardEntry *entries, int entry_count,
                                Button *back_btn);
 

@@ -71,12 +71,18 @@ const SDL_Color CLR_GLOW = {255, 255, 255, 60};           // Glow hover
 const SDL_Color CLR_SHADOW_SOFT = {0, 0, 0, 30};           // Soft shadows
 const SDL_Color CLR_SHADOW_HARD = {0, 0, 0, 80};           // Hard shadows
 
-// --- FIXED LAYOUT FOR 1920x1080 FULLSCREEN ---
-#define FIXED_BUTTON_WIDTH 200
-#define FIXED_BUTTON_HEIGHT 50
-#define FIXED_SPACING 20
-#define FIXED_INPUT_WIDTH 400
-#define FIXED_INPUT_HEIGHT 50
+// --- FIXED LAYOUT FOR 1120x720 FULLSCREEN ---
+// #define FIXED_BUTTON_WIDTH 200
+// #define FIXED_BUTTON_HEIGHT 50
+// #define FIXED_SPACING 20
+// #define FIXED_INPUT_WIDTH 400
+// #define FIXED_INPUT_HEIGHT 50
+#define FIXED_BUTTON_WIDTH   180
+#define FIXED_BUTTON_HEIGHT   50
+#define FIXED_SPACING         16
+#define FIXED_INPUT_WIDTH    380
+#define FIXED_INPUT_HEIGHT    50
+
 
 // FIXED button dimensions - no responsive
 int get_button_width(int screen_w) {
@@ -195,89 +201,130 @@ void draw_layered_shadow(SDL_Renderer *renderer, SDL_Rect rect, int radius, int 
 }
 
 // Vẽ Button với gradient, rounded corners và shadow
-void draw_button(SDL_Renderer *renderer, TTF_Font *font, Button *btn) {
-    SDL_Color bg_color_top, bg_color_bottom;
-    
-    if (btn->is_hovered) {
-        bg_color_top = (SDL_Color){96, 165, 250, 255};   // Lighter blue
-        bg_color_bottom = CLR_BTN_HOVER;
-    } else {
-        bg_color_top = CLR_BTN_NORM;
-        bg_color_bottom = CLR_PRIMARY_DK;
-    }
-    
-    // Layered shadow for depth
-    draw_layered_shadow(renderer, btn->rect, UI_CORNER_RADIUS, UI_SHADOW_OFFSET);
-    
-    // Main button with vertical gradient
-    draw_vertical_gradient(renderer, btn->rect, bg_color_top, bg_color_bottom);
-    
-    // Outer border
-    draw_rounded_border(renderer, btn->rect, bg_color_bottom, UI_CORNER_RADIUS, 1);
-    
-    // Glow effect on hover (stronger and colored)
-    if (btn->is_hovered) {
-        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-        
-        // Pulsing glow
-        float pulse = (sinf(SDL_GetTicks() / 300.0f) + 1.0f) / 2.0f;
-        int glow_alpha = 40 + (int)(pulse * 60);
-        
-        for (int i = 1; i <= 3; i++) {
-            SDL_Rect glow = {btn->rect.x - i, btn->rect.y - i, btn->rect.w + i*2, btn->rect.h + i*2};
-            SDL_Color glow_color = {150, 200, 255, glow_alpha / i};
-            draw_rounded_border(renderer, glow, glow_color, UI_CORNER_RADIUS + i, 1);
-        }
-        
-        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
-    }
-    
-    // Subtle top highlight for 3D effect
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    SDL_Rect highlight = {btn->rect.x + UI_CORNER_RADIUS, btn->rect.y + 2, 
-                          btn->rect.w - 2*UI_CORNER_RADIUS, 3};
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 50);
-    SDL_RenderFillRect(renderer, &highlight);
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+void draw_button_text(SDL_Renderer *renderer, TTF_Font *font, Button *btn, SDL_Color color) {
+    if (!font) return;
 
-    // Truncate button text to fit
-    char button_text[64];
-    strncpy(button_text, btn->text, sizeof(button_text) - 1);
-    button_text[sizeof(button_text) - 1] = '\0';
-    truncate_text_to_fit(button_text, sizeof(button_text), font, btn->rect.w - 20);
+    char text[64];
+    strncpy(text, btn->text, sizeof(text) - 1);
+    text[sizeof(text) - 1] = '\0';
 
-    // Text with shadow for depth
-    if (font) {
-        // Text shadow
-        SDL_Surface *shadow_surf = TTF_RenderText_Blended(font, button_text, (SDL_Color){0, 0, 0, 150});
-        if (shadow_surf) {
-            SDL_Texture *shadow_tex = SDL_CreateTextureFromSurface(renderer, shadow_surf);
-            SDL_Rect shadow_dst = {
-                btn->rect.x + (btn->rect.w - shadow_surf->w) / 2 + 1,
-                btn->rect.y + (btn->rect.h - shadow_surf->h) / 2 + 1,
-                shadow_surf->w, shadow_surf->h
-            };
-            SDL_RenderCopy(renderer, shadow_tex, NULL, &shadow_dst);
-            SDL_DestroyTexture(shadow_tex);
-            SDL_FreeSurface(shadow_surf);
-        }
-        
-        // Main text
-        SDL_Surface *surf = TTF_RenderText_Blended(font, button_text, CLR_WHITE);
-        if (surf) {
-            SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, surf);
-            SDL_Rect dst = {
-                btn->rect.x + (btn->rect.w - surf->w) / 2,
-                btn->rect.y + (btn->rect.h - surf->h) / 2,
-                surf->w, surf->h
-            };
-            SDL_RenderCopy(renderer, tex, NULL, &dst);
-            SDL_DestroyTexture(tex);
-            SDL_FreeSurface(surf);
-        }
+    truncate_text_to_fit(text, sizeof(text), font, btn->rect.w - 20);
+
+    // Shadow
+    SDL_Surface *shadow = TTF_RenderText_Blended(font, text, (SDL_Color){0,0,0,150});
+    SDL_Surface *surf   = TTF_RenderText_Blended(font, text, color);
+
+    if (shadow && surf) {
+        SDL_Texture *shadow_tex = SDL_CreateTextureFromSurface(renderer, shadow);
+        SDL_Texture *tex        = SDL_CreateTextureFromSurface(renderer, surf);
+
+        SDL_Rect dst = {
+            btn->rect.x + (btn->rect.w - surf->w) / 2,
+            btn->rect.y + (btn->rect.h - surf->h) / 2,
+            surf->w, surf->h
+        };
+
+        SDL_Rect shadow_dst = dst;
+        shadow_dst.x += 1;
+        shadow_dst.y += 1;
+
+        SDL_RenderCopy(renderer, shadow_tex, NULL, &shadow_dst);
+        SDL_RenderCopy(renderer, tex, NULL, &dst);
+
+        SDL_DestroyTexture(shadow_tex);
+        SDL_DestroyTexture(tex);
     }
+
+    SDL_FreeSurface(shadow);
+    SDL_FreeSurface(surf);
 }
 
+void draw_button_primary(SDL_Renderer *renderer, TTF_Font *font, Button *btn) {
+    SDL_Color top, bottom;
+
+    if (btn->is_hovered) {
+        top = CLR_PRIMARY_LIGHT;
+        bottom = CLR_BTN_HOVER;
+    } else {
+        top = CLR_BTN_NORM;
+        bottom = CLR_PRIMARY_DK;
+    }
+
+    draw_layered_shadow(renderer, btn->rect, UI_CORNER_RADIUS, UI_SHADOW_OFFSET);
+    draw_vertical_gradient(renderer, btn->rect, top, bottom);
+    draw_rounded_border(renderer, btn->rect, bottom, UI_CORNER_RADIUS, 1);
+
+    draw_button_text(renderer, font, btn, CLR_WHITE);
+}
+void draw_button_danger(SDL_Renderer *renderer, TTF_Font *font, Button *btn) {
+    SDL_Color top, bottom;
+
+    if (btn->is_hovered) {
+        top = (SDL_Color){255, 120, 120, 255};
+        bottom = CLR_DANGER;
+    } else {
+        top = CLR_DANGER;
+        bottom = (SDL_Color){185, 28, 28, 255};
+    }
+
+    draw_layered_shadow(renderer, btn->rect, UI_CORNER_RADIUS, UI_SHADOW_OFFSET);
+    draw_vertical_gradient(renderer, btn->rect, top, bottom);
+    draw_rounded_border(renderer, btn->rect, bottom, UI_CORNER_RADIUS, 1);
+
+    // Glow đỏ khi hover
+    if (btn->is_hovered) {
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+        for (int i = 1; i <= 3; i++) {
+            SDL_Rect glow = {
+                btn->rect.x - i,
+                btn->rect.y - i,
+                btn->rect.w + i * 2,
+                btn->rect.h + i * 2
+            };
+            SDL_Color glow_color = {255, 80, 80, 60 / i};
+            draw_rounded_border(renderer, glow, glow_color, UI_CORNER_RADIUS + i, 1);
+        }
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+    }
+
+    draw_button_text(renderer, font, btn, CLR_WHITE);
+}
+void draw_button_outline(SDL_Renderer *renderer, TTF_Font *font, Button *btn) {
+    SDL_Color border = btn->is_hovered ? CLR_PRIMARY : CLR_GRAY;
+    SDL_Color text   = btn->is_hovered ? CLR_WHITE : CLR_GRAY_LIGHT;
+
+    // Shadow nhẹ
+    draw_layered_shadow(renderer, btn->rect, UI_CORNER_RADIUS, 1);
+
+    // Fill khi hover
+    if (btn->is_hovered) {
+        draw_vertical_gradient(
+            renderer,
+            btn->rect,
+            CLR_PRIMARY_LIGHT,
+            CLR_PRIMARY_DK
+        );
+    }
+
+    // Border
+    draw_rounded_border(renderer, btn->rect, border, UI_CORNER_RADIUS, 2);
+
+    draw_button_text(renderer, font, btn, text);
+}
+
+void draw_button(SDL_Renderer *renderer, TTF_Font *font, Button *btn) {
+    switch (btn->type) {
+        case BTN_DANGER:
+            draw_button_danger(renderer, font, btn);
+            break;
+        case BTN_OUTLINE:
+            draw_button_outline(renderer, font, btn);
+            break;
+        default:
+            draw_button_primary(renderer, font, btn);
+            break;
+    }
+}
 
 // Vẽ Input Field với style hiện đại và rounded corners
 void draw_input_field(SDL_Renderer *renderer, TTF_Font *font, InputField *field) {
@@ -453,21 +500,21 @@ void render_login_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Font 
         }
     }
 
-    // Input field positions already set in main.c (685, 350/450/550, 550x65)
+    // Input field positions already set in main.c (335, 350/450/550, 450x65)
     // Just draw them
     int is_registration = (email != NULL);
     
     draw_input_field(renderer, font_small, username);
     if (is_registration) {
         // Adjust password Y for registration mode
-        password->rect.y = 650;  // More space for email field
+        password->rect.y = 440;  // More space for email field
         draw_input_field(renderer, font_small, email);
     } else {
-        password->rect.y = 550;  // Standard login spacing
+        password->rect.y = 360;  // Standard login spacing
     }
     draw_input_field(renderer, font_small, password);
 
-    // Button positions already set in main.c (760/970, 680, 180x60)
+    // Button positions already set in main.c (410/630, 540, 180x60)
     // Set button labels based on mode
     if (is_registration) {
         strcpy(login_btn->text, "Back");
@@ -484,19 +531,32 @@ void render_login_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Font 
     if (font_small && message && strlen(message) > 0) {
         SDL_Surface *surf = TTF_RenderText_Blended(font_small, message, CLR_DANGER);
         if (surf) {
-            SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, surf);
-            SDL_Rect rect = {
-                center_x - surf->w / 2,
-                800,
-                surf->w, 
-                surf->h
-            };
-            SDL_RenderCopy(renderer, tex, NULL, &rect);
-            SDL_DestroyTexture(tex);
-            SDL_FreeSurface(surf);
+            if (is_registration) {
+                // Position below register button
+                SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, surf);
+                SDL_Rect rect = {
+                    center_x - surf->w / 2,
+                    160,
+                    surf->w, 
+                    surf->h
+                };
+                SDL_RenderCopy(renderer, tex, NULL, &rect);
+                SDL_DestroyTexture(tex);
+                SDL_FreeSurface(surf);
+            } else {
+                SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, surf);
+                SDL_Rect rect = {
+                    center_x - surf->w / 2,
+                    460,
+                    surf->w, 
+                    surf->h
+                };
+                SDL_RenderCopy(renderer, tex, NULL, &rect);
+                SDL_DestroyTexture(tex);
+                SDL_FreeSurface(surf);
+            }
         }
     }
-    
     //SDL_RenderPresent(renderer);
 }
 
@@ -518,7 +578,7 @@ void render_lobby_list_screen(SDL_Renderer *renderer, TTF_Font *font,
         SDL_Surface *title_shadow = TTF_RenderText_Blended(font, title_text, (SDL_Color){0, 0, 0, 120});
         if (title_shadow) {
             SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, title_shadow);
-            SDL_Rect rect = {(win_w - title_shadow->w) / 2 + 3, 33, title_shadow->w, title_shadow->h};
+            SDL_Rect rect = {(win_w - title_shadow->w) / 2 + 3, 30, title_shadow->w, title_shadow->h};
             SDL_RenderCopy(renderer, tex, NULL, &rect);
             SDL_DestroyTexture(tex);
             SDL_FreeSurface(title_shadow);
@@ -527,18 +587,18 @@ void render_lobby_list_screen(SDL_Renderer *renderer, TTF_Font *font,
         SDL_Surface *title = TTF_RenderText_Blended(font, title_text, CLR_ACCENT);
         if (title) {
             SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, title);
-            SDL_Rect rect = {(win_w - title->w) / 2, 30, title->w, title->h};
+            SDL_Rect rect = {(win_w - title->w) / 2, 27, title->w, title->h};
             SDL_RenderCopy(renderer, tex, NULL, &rect);
             SDL_DestroyTexture(tex);
             SDL_FreeSurface(title);
         }
     }
     
-    // FIXED lobby cards for 1920x1080
-    int y = 162;  // Fixed from top
-    int list_width = 1056;  // Fixed width (55% of 1920)
-    int card_height = 75;  // Fixed height
-    int start_x = 432;  // Centered: (1920-1056)/2
+    // FIXED lobby cards for 1120x720
+    int y = 120;  // Fixed from top
+    int list_width = 640;  // Fixed width
+    int card_height = 80;  // Fixed height
+    int start_x = 240;  // Centered: (1120-640)/2
 
     for (int i = 0; i < lobby_count; i++) {
         SDL_Rect lobby_rect = {start_x, y, list_width, card_height};
@@ -602,7 +662,7 @@ void render_lobby_list_screen(SDL_Renderer *renderer, TTF_Font *font,
                     player_surf->w, player_surf->h
                 };
                 SDL_RenderCopy(renderer, tex, NULL, &rect);
-        SDL_DestroyTexture(tex);
+                SDL_DestroyTexture(tex);
                 SDL_FreeSurface(player_surf);
             }
             
@@ -656,7 +716,7 @@ void render_lobby_room_screen(SDL_Renderer *renderer, TTF_Font *font,
         SDL_Surface *title_shadow = TTF_RenderText_Blended(font, title_text, (SDL_Color){0, 0, 0, 120});
         if (title_shadow) {
             SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, title_shadow);
-            SDL_Rect rect = {(win_w - title_shadow->w) / 2 + 2, 32, title_shadow->w, title_shadow->h};
+            SDL_Rect rect = {(win_w - title_shadow->w) / 2 + 3, 30, title_shadow->w, title_shadow->h};
             SDL_RenderCopy(renderer, tex, NULL, &rect);
             SDL_DestroyTexture(tex);
             SDL_FreeSurface(title_shadow);
@@ -665,62 +725,50 @@ void render_lobby_room_screen(SDL_Renderer *renderer, TTF_Font *font,
         SDL_Surface *title = TTF_RenderText_Blended(font, title_text, CLR_ACCENT);
         if (title) {
             SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, title);
-            SDL_Rect rect = {(win_w - title->w) / 2, 30, title->w, title->h};
+            SDL_Rect rect = {(win_w - title->w) / 2, 27, title->w, title->h};
             SDL_RenderCopy(renderer, tex, NULL, &rect);
             SDL_DestroyTexture(tex);
             SDL_FreeSurface(title);
         }
         
-        // Host-only buttons (Lock Room, Chat) - top right
+        // Host-only buttons (top right)
         if (my_player_id == lobby->host_id) {
-            // Lock Room button
-            SDL_Rect lock_btn = {1620, 100, 180, 50};
-            SDL_Color lock_bg = lobby->is_locked ? CLR_DANGER : CLR_PRIMARY;
-            const char *lock_text = lobby->is_locked ? "Unlock" : "Lock Room";
-            
-            draw_layered_shadow(renderer, lock_btn, UI_CORNER_RADIUS, 3);
-            draw_rounded_rect(renderer, lock_btn, lock_bg, UI_CORNER_RADIUS);
-            draw_rounded_border(renderer, lock_btn, CLR_GRAY, UI_CORNER_RADIUS, 1);
-            
-            SDL_Surface *surf = TTF_RenderText_Blended(font, lock_text, CLR_WHITE);
-            if (surf) {
-                SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, surf);
-                SDL_Rect rect = {lock_btn.x + (lock_btn.w - surf->w) / 2,
-                                lock_btn.y + (lock_btn.h - surf->h) / 2,
-                                surf->w, surf->h};
-                SDL_RenderCopy(renderer, tex, NULL, &rect);
-                SDL_DestroyTexture(tex);
-                SDL_FreeSurface(surf);
-            }
+
+            Button btn_lock = {
+                .rect = {803, 15, 180, 50},
+                .is_hovered = 0,
+                .type = lobby->is_locked ? BTN_DANGER : BTN_PRIMARY
+            };
+
+            strncpy(btn_lock.text,
+                    lobby->is_locked ? "Unlock" : "Lock Room",
+                    sizeof(btn_lock.text) - 1);
+            btn_lock.text[sizeof(btn_lock.text) - 1] = '\0';
+            draw_button(renderer, font, &btn_lock);
         }
+
         
         // Chat button (for everyone)
-        SDL_Rect chat_btn = {1620, 170, 180, 50};
-        draw_layered_shadow(renderer, chat_btn, UI_CORNER_RADIUS, 3);
-        draw_rounded_rect(renderer, chat_btn, CLR_INPUT_BG, UI_CORNER_RADIUS);
-        draw_rounded_border(renderer, chat_btn, CLR_PRIMARY, UI_CORNER_RADIUS, 1);
-        
-        SDL_Surface *surf = TTF_RenderText_Blended(font, "Chat", CLR_WHITE);
-        if (surf) {
-            SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, surf);
-            SDL_Rect rect = {chat_btn.x + (chat_btn.w - surf->w) / 2,
-                            chat_btn.y + (chat_btn.h - surf->h) / 2,
-                            surf->w, surf->h};
-            SDL_RenderCopy(renderer, tex, NULL, &rect);
-            SDL_DestroyTexture(tex);
-            SDL_FreeSurface(surf);
-        }
+        Button btn_chat = {
+            .rect = {993, 15, 90, 50},
+            .is_hovered = 0,
+            .type = BTN_OUTLINE
+        };
+
+        strncpy(btn_chat.text, "Chat", sizeof(btn_chat.text) - 1);
+        btn_chat.text[sizeof(btn_chat.text) - 1] = '\0';
+        draw_button(renderer, font, &btn_chat);
     }
     
     // Player list with LARGER cards
-    int y = 180;  // Start a bit lower after title
-    int card_width = 750;  // LARGER (was 600)
+    int y = 120;  // Start a bit lower after title
+    int card_width = 640;  
     int start_x = (win_w - card_width) / 2;
 
     for (int i = 0; i < lobby->num_players; i++) {
         Player *p = &lobby->players[i];
         
-        int card_height = 100;  // LARGER (was 75)
+        int card_height = 75; 
         SDL_Rect card_rect = {start_x, y, card_width, card_height};
         
         // Enhanced shadow
@@ -795,7 +843,7 @@ void render_lobby_room_screen(SDL_Renderer *renderer, TTF_Font *font,
             
             // Role badge - aligned below username
             if (i == lobby->host_id) {
-                SDL_Rect host_badge = {start_x + 75, y + 55, 80, 28};
+                SDL_Rect host_badge = {start_x + 520, y + 26, 80, 28};
                 draw_rounded_rect(renderer, host_badge, (SDL_Color){167, 139, 250, 255}, 4);
                 
                 SDL_Surface *host_surf = TTF_RenderText_Blended(font, "HOST", 
@@ -815,7 +863,7 @@ void render_lobby_room_screen(SDL_Renderer *renderer, TTF_Font *font,
             
             // Status badge on right - LARGER
             if (i != lobby->host_id) {
-                SDL_Rect status_badge = {start_x + card_width - 120, y + 35, 100, 40};  // 100x40 (was 80x30)
+                SDL_Rect status_badge = {start_x + 495, y + 26, 130, 28};
                 SDL_Color badge_color = p->is_ready ? CLR_SUCCESS : 
                     (SDL_Color){71, 85, 105, 255};
                 draw_rounded_rect(renderer, status_badge, badge_color, 6);
@@ -838,41 +886,17 @@ void render_lobby_room_screen(SDL_Renderer *renderer, TTF_Font *font,
                 
                 // Kick button for host
                 if (my_player_id == lobby->host_id) {
-                    SDL_Rect kick_btn = {start_x + card_width - 230, y + 35, 90, 40};
-                    draw_rounded_rect(renderer, kick_btn, CLR_DANGER, 6);
-                    draw_rounded_border(renderer, kick_btn, (SDL_Color){200, 50, 50, 255}, 6, 1);
-                    
-                    SDL_Surface *kick_surf = TTF_RenderText_Blended(font, "Kick", CLR_WHITE);
-                    if (kick_surf) {
-                        SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, kick_surf);
-                        SDL_Rect rect = {
-                            kick_btn.x + (kick_btn.w - kick_surf->w) / 2,
-                            kick_btn.y + (kick_btn.h - kick_surf->h) / 2,
-                            kick_surf->w, kick_surf->h
-                        };
-                        SDL_RenderCopy(renderer, tex, NULL, &rect);
-                        SDL_DestroyTexture(tex);
-                        SDL_FreeSurface(kick_surf);
-                    }
+
+                    Button btn_kick = {
+                        .rect = {start_x + 380, y + 26, 90, 28},
+                        .is_hovered = 0,
+                        .type = BTN_DANGER
+                    };
+
+                    strncpy(btn_kick.text, "Kick", sizeof(btn_kick.text) - 1);
+                    btn_kick.text[sizeof(btn_kick.text) - 1] = '\0';
+                    draw_button(renderer, font, &btn_kick);
                 }
-            } else {
-                // // Crown icon cho host 
-                // SDL_Rect crown_bg = {start_x + card_width - 60, y + 22, 40, 30};
-                // SDL_SetRenderDrawColor(renderer, 251, 191, 36, 200);
-                // SDL_RenderFillRect(renderer, &crown_bg);
-                
-                // SDL_Surface *crown_surf = TTF_RenderText_Blended(font, "♛", CLR_WHITE);
-                // if (crown_surf) {
-                //     SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, crown_surf);
-                //     SDL_Rect rect = {
-                //         crown_bg.x + (crown_bg.w - crown_surf->w) / 2,
-                //         crown_bg.y + (crown_bg.h - crown_surf->h) / 2,
-                //         crown_surf->w, crown_surf->h
-                //     };
-                //     SDL_RenderCopy(renderer, tex, NULL, &rect);
-                //     SDL_DestroyTexture(tex);
-                //     SDL_FreeSurface(crown_surf);
-                // }
             }
         }
         y += card_height + 20;  // 20px spacing (was 15)
@@ -885,25 +909,25 @@ void render_lobby_room_screen(SDL_Renderer *renderer, TTF_Font *font,
     // Cập nhật vị trí nút Leave (luôn hiện)
     leave_btn->rect.x = center_x + 120;
     leave_btn->rect.y = button_y;
-    leave_btn->rect.w = 150;
+    leave_btn->rect.w = 200;
     leave_btn->rect.h = 50;
     
     // Vẽ nút tùy theo vai trò
     if (my_player_id == lobby->host_id) {
         // Host chỉ thấy Start Game và Leave
         if (start_btn) {
-            start_btn->rect.x = center_x - 270;
+            start_btn->rect.x = center_x - 320;
             start_btn->rect.y = button_y;
-            start_btn->rect.w = 230;
+            start_btn->rect.w = 200;
             start_btn->rect.h = 50;
             draw_button(renderer, font, start_btn);
         }
     } else {
         // Người chơi thường chỉ thấy Ready và Leave
         if (ready_btn) {
-            ready_btn->rect.x = center_x - 270;
+            ready_btn->rect.x = center_x - 320;
             ready_btn->rect.y = button_y;
-            ready_btn->rect.w = 230;
+            ready_btn->rect.w = 200;
             ready_btn->rect.h = 50;
             draw_button(renderer, font, ready_btn);
         }

@@ -58,55 +58,58 @@ LeaderboardEntry leaderboard[100];
 int leaderboard_count = 0;
 
 // UI Components - UPDATED SIZES AND POSITIONS
-// Login/Register inputs - centered, larger
-InputField inp_user = {{685, 350, 550, 65}, "", "Username:", 0, 30};
-InputField inp_email = {{685, 450, 550, 65}, "", "Email:", 0, 127};
-InputField inp_pass = {{685, 550, 550, 65}, "", "Password:", 0, 30};
-Button btn_login = {{760, 680, 180, 60}, "Login", 0};
-Button btn_reg = {{970, 680, 180, 60}, "Register", 0};
+// Login/Register inputs - centered, adjusted for 1120x720
+InputField inp_user  = {{335, 240, 450, 65}, "", "Username:", 0, 30};
+InputField inp_email = {{335, 340, 450, 65}, "", "Email:",    0, 127};
+InputField inp_pass  = {{335, 440, 450, 65}, "", "Password:", 0, 30};
+Button btn_login = {{335, 560, 180, 60}, "Login",    0, BTN_PRIMARY};
+Button btn_reg   = {{605, 560, 180, 60}, "Register", 0, BTN_PRIMARY};
 
-// Lobby list buttons - BOTTOM CENTER, larger
-Button btn_create = {{500, 940, 280, 70}, "Create Room", 0};
-Button btn_refresh = {{820, 940, 280, 70}, "Refresh", 0};
-Button btn_friends = {{1140, 940, 280, 70}, "Friends", 0};
-Button btn_quick_play = {{1460, 940, 280, 70}, "Quick Play", 0};  // NEW
-Button btn_profile = {{1620, 20, 130, 55}, "Profile", 0};
-Button btn_leaderboard = {{1765, 20, 130, 55}, "Top", 0};
+// Lobby list buttons - BOTTOM CENTER, adjusted for 1120x720
+Button btn_create     = {{250, 620, 200, 60}, "Create Room", 0 , BTN_PRIMARY};
+Button btn_refresh    = {{460, 620, 200, 60}, "Refresh", 0 , BTN_PRIMARY};
+Button btn_friends    = {{670, 620, 200, 60}, "Friends", 0, BTN_PRIMARY};
+Button btn_quick_play = {{880, 620, 200, 60}, "Quick Play", 0, BTN_PRIMARY};
+Button btn_profile     = {{850, 20, 130, 50}, "Profile", 0, BTN_PRIMARY};
+Button btn_leaderboard = {{1000, 20, 80, 50}, "Top", 0, BTN_OUTLINE};
 
-// Lobby room buttons - RAISED for better positioning (Y: 940->910)
-Button btn_ready = {{540, 910, 280, 70}, "Ready", 0};
-Button btn_start = {{430, 910, 340, 70}, "Start Game", 0};
-Button btn_leave = {{860, 910, 280, 70}, "Leave", 0};
+
+// Lobby room buttons
+Button btn_ready = {{260, 600, 220, 60}, "Ready", 0, BTN_PRIMARY};
+Button btn_start = {{500, 600, 300, 60}, "Start Game", 0, BTN_PRIMARY};
+Button btn_leave = {{820, 600, 220, 60}, "Leave", 0, BTN_DANGER};
+
 
 // Lobby room - host-only buttons
-Button btn_lock_room = {{1620, 100, 180, 50}, "Lock Room", 0};
-Button btn_chat = {{1620, 170, 180, 50}, "Chat", 0};
+// Button btn_lock_room = {{900, 100, 180, 50}, "Lock Room", 0};
+// Button btn_chat      = {{900, 160, 180, 50}, "💬", 0};
 // Kick buttons will be positioned per-player dynamically
 
 // Game mode selection
 int selected_game_mode = 0;  // 0=Classic, 1=Sudden Death, 2=Fog of War
 
-// Room creation UI - larger
-InputField inp_room_name = {{685, 380, 550, 60}, "", "Room Name:", 0, 63};
-InputField inp_access_code = {{685, 480, 450, 60}, "", "Access Code (6 digits, optional):", 0, 6};
+// Room creation UI - adjusted for 1120x720
+InputField inp_room_name   = {{335, 260, 450, 60}, "", "Room Name:", 0, 63};
+InputField inp_access_code = {{335, 350, 350, 60}, "", "Access Code (6 digits, optional):", 0, 6};
 int show_create_room_dialog = 0;
 int creating_private_room = 0;
-Button btn_create_confirm = {{0, 0, 220, 60}, "Create", 0};
-Button btn_cancel = {{0, 0, 220, 60}, "Cancel", 0};
+Button btn_create_confirm = {{370, 440, 220, 60}, "Create", 0, BTN_PRIMARY};
+Button btn_cancel         = {{620, 440, 220, 60}, "Cancel", 0, BTN_DANGER};
 
 // Notification system
 char notification_message[256] = "";
 Uint32 notification_time = 0;
 const int NOTIFICATION_DURATION = 3000; // 3 seconds
 
-// Access code prompt for joining private rooms - larger
-InputField inp_join_code = {{685, 450, 550, 60}, "", "Enter 6-digit access code:", 0, 6};
+// Access code prompt for joining private rooms - adjusted for 1120x720
+InputField inp_join_code = {{335, 320, 450, 60}, "", "Enter 6-digit access code:", 0, 6};
 int show_join_code_dialog = 0;
 int selected_private_lobby_id = -1;
 
-// Friend request UI - fixed spacing and button width
-InputField inp_friend_request = {{685, 870, 350, 60}, "", "Enter display name...", 0, 31};
-Button btn_send_friend_request = {{1060, 870, 220, 60}, "Send Request", 0};  // W: 200->220 to fit text
+// Friend request UI - adjusted for 1120x720
+InputField inp_friend_request = {{400, 620, 360, 60}, "", "Enter display name...", 0, 31};
+Button btn_send_friend_request = {{800, 620, 220, 60}, "Send Request", 0};
+
 
 // Delete friend confirmation
 int show_delete_confirm = 0;
@@ -114,7 +117,7 @@ int delete_friend_index = -1;
 
 // Settings screen state
 int settings_active_tab = 0;  // 0=Graphics, 1=Controls, 2=Account
-Button btn_settings = {{20, 940, 200, 60}, "Settings", 0};
+Button btn_settings = {{40, 620, 200, 60}, "Settings", 0};
 Button btn_settings_apply = {{0, 0, 200, 60}, "Apply", 0};
 
 // Post-match screen state  
@@ -123,8 +126,8 @@ int post_match_elo_changes[4] = {0, 0, 0, 0};
 int post_match_kills[4] = {0, 0, 0, 0};
 int post_match_duration = 0;  // Match duration in seconds
 int post_match_shown = 0;  // Prevent showing multiple times
-Button btn_rematch = {{0, 0, 250, 60}, "Rematch", 0};
-Button btn_return_lobby = {{0, 0, 250, 60}, "Return", 0};
+Button btn_rematch       = {{360, 800, 250, 60}, "Rematch", 0};
+Button btn_return_lobby  = {{610, 800, 250, 60}, "Return", 0};
 
 // Game timer tracking
 Uint32 game_start_time = 0;  // SDL ticks when game started
@@ -276,7 +279,7 @@ void process_server_packet(ServerPacket *pkt) {
             
             if (current_lobby.status == LOBBY_PLAYING) {
                 if (current_screen != SCREEN_GAME) {
-                    add_notification("Game đã bắt đầu!", (SDL_Color){0, 255, 0, 255});
+                    add_notification("Game started!", (SDL_Color){0, 255, 0, 255});
                     game_start_time = SDL_GetTicks();  // Start the timer
                 }
                 current_screen = SCREEN_GAME;
@@ -304,16 +307,16 @@ void process_server_packet(ServerPacket *pkt) {
                     
                     char msg[128];
                     if (current_state.winner_id == 0) {
-                        snprintf(msg, sizeof(msg), "🎉 Chúc mừng! Bạn đã chiến thắng! 🎉");
+                        snprintf(msg, sizeof(msg), "Congratulations! You Win!");
                         add_notification(msg, (SDL_Color){0, 255, 0, 255});
                     } else {
-                        snprintf(msg, sizeof(msg), "%s đã chiến thắng!", 
+                        snprintf(msg, sizeof(msg), "%s has won!", 
                                 current_state.players[current_state.winner_id].username);
                         add_notification(msg, (SDL_Color){255, 215, 0, 255});
                     }
                 } else {
                     printf("║      Draw!                 ║\n");
-                    add_notification("Trận đấu hòa!", (SDL_Color){200, 200, 200, 255});
+                    add_notification("Match draw!", (SDL_Color){200, 200, 200, 255});
                 }
                 printf("╚═══════════════════════╝\n\n");
                 
@@ -443,13 +446,13 @@ int main(int argc, char *argv[]) {
     
     printf("Connected to server!\n");
 
-    // 2. Setup SDL - FULLSCREEN 1920x1080
+    // 2. Setup SDL - FULLSCREEN 1120x720
     SDL_Init(SDL_INIT_VIDEO);
     TTF_Init();
     SDL_Window *win = SDL_CreateWindow("Bomberman", 
                                        SDL_WINDOWPOS_CENTERED, 
                                        SDL_WINDOWPOS_CENTERED, 
-                                       1920, 1080, 
+                                       1120, 720, 
                                        SDL_WINDOW_SHOWN);
     SDL_Renderer *rend = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     if (!win) {
@@ -466,6 +469,12 @@ int main(int argc, char *argv[]) {
     if (!font_large) {
         font_large = TTF_OpenFont("C:\\Windows\\Fonts\\arialbd.ttf", 64);
     }
+
+    TTF_Font *font_medium = TTF_OpenFont("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 40);
+    if (!font_medium) {
+        font_medium = TTF_OpenFont("C:\\Windows\\Fonts\\arialbd.ttf", 40);
+    }
+
     
     // font_small now uses 26pt (updated in init_font)
     TTF_Font *font_small = init_font();
@@ -658,10 +667,10 @@ int main(int argc, char *argv[]) {
                         }
                         
                         // Lobby click detection - MUST MATCH ui_screens.c coordinates
-                        int list_width = 1056;  // Fixed width from ui_screens.c
-                        int start_x = 432;      // Centered: (1920-1056)/2
-                        int y = 162;            // Fixed from top (matches rendering)
-                        int card_height = 75;   // Card height from ui_screens.c
+                        int y = 120;  // Fixed from top
+                        int list_width = 640;  // Fixed width
+                        int card_height = 80;  // Fixed height
+                        int start_x = 240;  // Centered: (1120-640)/2
                         
                         for (int i = 0; i < lobby_count; i++) {
                             SDL_Rect r = {start_x, y, list_width, card_height};
@@ -693,7 +702,7 @@ int main(int argc, char *argv[]) {
                     if (show_create_room_dialog) {
                         if (e.type == SDL_MOUSEBUTTONDOWN) {
                             inp_room_name.is_active = is_mouse_inside(inp_room_name.rect, mx, my);
- inp_access_code.is_active = is_mouse_inside(inp_access_code.rect, mx, my);
+                            inp_access_code.is_active = is_mouse_inside(inp_access_code.rect, mx, my);
                             
                             // Game mode buttons - calculate positions from render_create_room_dialog
                             int win_w, win_h;
@@ -854,14 +863,14 @@ int main(int argc, char *argv[]) {
                         }
                         // Lock Room button (host only)
                         else if (my_player_id == current_lobby.host_id && 
-                                is_mouse_inside((SDL_Rect){1620, 100, 180, 50}, mx, my)) {
+                                is_mouse_inside((SDL_Rect){803, 15, 180, 50}, mx, my)) {
                             // Toggle lock - show notification (backend not implemented)
                             snprintf(notification_message, sizeof(notification_message),
                                     "Room locking coming soon!");
                             notification_time = SDL_GetTicks();
                         }
                         // Chat button
-                        else if (is_mouse_inside((SDL_Rect){1620, 170, 180, 50}, mx, my)) {
+                        else if (is_mouse_inside((SDL_Rect){993, 15, 90, 50}, mx, my)) {
                             // Open chat - show notification (backend not implemented)
                             snprintf(notification_message, sizeof(notification_message),
                                     "Chat system coming soon!");
@@ -870,8 +879,8 @@ int main(int argc, char *argv[]) {
                         // Kick buttons (host only, check for each player)
                         else if (my_player_id == current_lobby.host_id) {
                             int card_y = 200;
-                            int card_width = 850;
-                            int start_x = (1920 - card_width) / 2;
+                            int card_width = 616;
+                            int start_x = (1120 - card_width) / 2;
                             
                             for (int i = 0; i < current_lobby.num_players; i++) {
                                 if (i != current_lobby.host_id) {
@@ -917,14 +926,14 @@ int main(int argc, char *argv[]) {
                     if (e.type == SDL_MOUSEBUTTONDOWN) {
                         // Post-match screen buttons
                         printf("[CLIENT] Post-match click at (%d, %d)\n", mx, my);
-                        if (is_mouse_inside((SDL_Rect){660, 850, 250, 60}, mx, my)) {
+                        if (is_mouse_inside((SDL_Rect){300, 480, 240, 60}, mx, my)) {
                             // Rematch - return to lobby room for another game
                             printf("[CLIENT] Rematch button clicked - returning to lobby room\n");
                             current_screen = SCREEN_LOBBY_ROOM;
                             post_match_shown = 0;  // Reset for next match
                             // Note: Players are still in the lobby, host can start another game
                         }
-                        if (is_mouse_inside((SDL_Rect){930, 850, 250, 60}, mx, my)) {
+                        if (is_mouse_inside((SDL_Rect){580, 480, 240, 60}, mx, my)) {
                             // Return to lobby list - LEAVE CURRENT LOBBY FIRST
                             printf("[CLIENT] Return to lobby button clicked - leaving lobby and switching to LOBBY_LIST\n");
                             send_packet(MSG_LEAVE_LOBBY, 0);  // Leave current lobby
@@ -935,177 +944,226 @@ int main(int argc, char *argv[]) {
                     }
                     break;
                     
-                case SCREEN_FRIENDS:
-                case SCREEN_PROFILE:
-                case SCREEN_LEADERBOARD:
-                    // Handle delete friend confirmation dialog first
-                    if (current_screen == SCREEN_FRIENDS && show_delete_confirm) {
+                case SCREEN_FRIENDS: {
+                    /* ===== DELETE CONFIRM ===== */
+                    if (show_delete_confirm) {
                         if (e.type == SDL_MOUSEBUTTONDOWN) {
                             SDL_Rect yes_btn = {300, 350, 100, 40};
-                            SDL_Rect no_btn = {420, 350, 100, 40};
-                            
+                            SDL_Rect no_btn  = {420, 350, 100, 40};
+
                             if (is_mouse_inside(yes_btn, mx, my)) {
-                                // Confirm delete
-                                if (delete_friend_index >= 0 && delete_friend_index < friends_count) {
+                                if (delete_friend_index >= 0 &&
+                                    delete_friend_index < friends_count) {
+
                                     ClientPacket pkt;
                                     memset(&pkt, 0, sizeof(pkt));
                                     pkt.type = MSG_FRIEND_REMOVE;
-                                    pkt.target_user_id = friends_list[delete_friend_index].user_id;
+                                    pkt.target_user_id =
+                                        friends_list[delete_friend_index].user_id;
                                     send(sock, &pkt, sizeof(pkt), 0);
-                                    
-                                    snprintf(notification_message, sizeof(notification_message),
-                                            "Removed %s from friends", friends_list[delete_friend_index].display_name);
+
+                                    send_packet(MSG_FRIEND_LIST, 0);
+
+                                    snprintf(notification_message,
+                                            sizeof(notification_message),
+                                            "Removed %s from friends",
+                                            friends_list[delete_friend_index].display_name);
                                     notification_time = SDL_GetTicks();
                                 }
                                 show_delete_confirm = 0;
                                 delete_friend_index = -1;
                             }
-                            
+
                             if (is_mouse_inside(no_btn, mx, my)) {
                                 show_delete_confirm = 0;
                                 delete_friend_index = -1;
                             }
                         }
-                        
-                        if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE) {
+
+                        if (e.type == SDL_KEYDOWN &&
+                            e.key.keysym.sym == SDLK_ESCAPE) {
                             show_delete_confirm = 0;
                             delete_friend_index = -1;
                         }
                         break;
                     }
-                    
+
+                    /* ===== MOUSE CLICK ===== */
                     if (e.type == SDL_MOUSEBUTTONDOWN) {
-                        // Handle friend request sending
-                        if (current_screen == SCREEN_FRIENDS) {
-                            inp_friend_request.is_active = is_mouse_inside(inp_friend_request.rect, mx, my);
-                            
-                            // Check Remove button for friends
-                            int list_y = 140;  // Match rendering position
-                            for (int i = 0; i < friends_count && i < 5; i++) {
-                                SDL_Rect remove_btn = {360, list_y + 18, 30, 24};
-                                SDL_Rect card = {50, list_y, 350, 60};
-                                
-                                if (is_mouse_inside(remove_btn, mx, my)) {
-                                    // Show delete confirmation dialog
-                                    show_delete_confirm = 1;
-                                    delete_friend_index = i;
-                                    break;
-                                }
-                                
-                                // Click card to view profile
-                                if (is_mouse_inside(card, mx, my) && !is_mouse_inside(remove_btn, mx, my)) {
-                                    // Request friend's profile
-                                    ClientPacket pkt;
-                                    memset(&pkt, 0, sizeof(pkt));
-                                    pkt.type = MSG_GET_PROFILE;
-                                    pkt.target_user_id = friends_list[i].user_id;
-                                    send(sock, &pkt, sizeof(pkt), 0);
-                                    current_screen = SCREEN_PROFILE;
-                                    break;
-                                }
-                                
-                                list_y += 70;
+
+                        inp_friend_request.is_active = is_mouse_inside(inp_friend_request.rect, mx, my);
+
+                        /* ===== FRIEND LIST ===== */
+                        int list_y = 134 + 46;
+                        int card_width = 360;
+
+                        for (int i = 0; i < friends_count && i < 5; i++) {
+                            SDL_Rect card = {80, list_y, card_width, 100};
+                            SDL_Rect remove_btn = {
+                                card.x + card.w - 70,
+                                list_y + 38,
+                                50, 35
+                            };
+
+                            if (is_mouse_inside(remove_btn, mx, my)) {
+                                show_delete_confirm = 1;
+                                delete_friend_index = i;
+                                break;
                             }
-                            
-                            // Check Accept/Decline buttons for pending requests - MATCH ui_new_screens.c
-                            int pending_y = 140;  // Starting Y position (matches ui_new_screens.c line 155)
-                            int pending_x = 900;  // Right column X position (matches ui_new_screens.c line 156)
-                            pending_y += 50;  // Skip title offset
-                            
-                            for (int i = 0; i < pending_count && i < 5; i++) {
-                                // MATCH rendering coordinates from ui_new_screens.c lines 197, 210
-                                SDL_Rect accept_btn = {pending_x + 20, pending_y + 60, 90, 35};
-                                SDL_Rect decline_btn = {pending_x + 125, pending_y + 60, 90, 35};
-                                
-                                if (is_mouse_inside(accept_btn, mx, my)) {
-                                    // Accept friend request
-                                    ClientPacket pkt;
-                                    memset(&pkt, 0, sizeof(pkt));
-                                    pkt.type = MSG_FRIEND_ACCEPT;
-                                    pkt.target_user_id = pending_requests[i].user_id;
-                                    send(sock, &pkt, sizeof(pkt), 0);
-                                    
-                                    snprintf(notification_message, sizeof(notification_message),
-                                            "Accepted %s's friend request!", pending_requests[i].display_name);
-                                    notification_time = SDL_GetTicks();
-                                    break;
-                                }
-                                
-                                if (is_mouse_inside(decline_btn, mx, my)) {
-                                    // Decline friend request
-                                    ClientPacket pkt;
-                                    memset(&pkt, 0, sizeof(pkt));
-                                    pkt.type = MSG_FRIEND_DECLINE;
-                                    pkt.target_user_id = pending_requests[i].user_id;
-                                    send(sock, &pkt, sizeof(pkt), 0);
-                                    
-                                    snprintf(notification_message, sizeof(notification_message),
-                                            "Declined friend request");
-                                    notification_time = SDL_GetTicks();
-                                    break;
-                                }
-                                
-                                pending_y += 125;  // Card spacing (matches ui_new_screens.c line 222)
+
+                            if (is_mouse_inside(card, mx, my)) {
+                                ClientPacket pkt;
+                                memset(&pkt, 0, sizeof(pkt));
+                                pkt.type = MSG_GET_PROFILE;
+                                pkt.target_user_id = friends_list[i].user_id;
+                                send(sock, &pkt, sizeof(pkt), 0);
+                                current_screen = SCREEN_PROFILE;
+                                break;
                             }
-                            
-                            if (is_mouse_inside(btn_send_friend_request.rect, mx, my)) {
-                                if (strlen(inp_friend_request.text) > 0) {
-                                    ClientPacket pkt;
-                                    memset(&pkt, 0, sizeof(pkt));
-                                    pkt.type = MSG_FRIEND_REQUEST;
-                                    strncpy(pkt.target_display_name, inp_friend_request.text, MAX_DISPLAY_NAME - 1);
-                                    send(sock, &pkt, sizeof(pkt), 0);
-                                    
-                                    snprintf(notification_message, sizeof(notification_message), 
-                                            "Friend request sent to %s!", inp_friend_request.text);
-                                    notification_time = SDL_GetTicks();
-                                    inp_friend_request.text[0] = '\0';
-                                }
-                            }
+
+                            list_y += 110;
                         }
-                        
-                        // Back button for all screens
-                        int win_w, win_h;
-                        SDL_GetRendererOutputSize(rend, &win_w, &win_h);
-                        SDL_Rect back_rect = {win_w/2 - 75, win_h - 100, 150, 50};
-                        
-                        if (current_screen == SCREEN_SETTINGS) {
-                            // Settings screen back button
-                            if (is_mouse_inside((SDL_Rect){980, 850, 200, 60}, mx, my)) {
-                                current_screen = SCREEN_LOBBY_LIST;
-                                send_packet(MSG_LIST_LOBBIES, 0);
+
+                        /* ===== PENDING REQUESTS ===== */
+                        int pending_x = 480;
+                        int pending_y = 134 + 46;
+
+                        for (int i = 0; i < pending_count && i < 5; i++) {
+                            SDL_Rect accept_btn  =
+                                {pending_x + 40,  pending_y + 55, 90, 35};
+                            SDL_Rect decline_btn =
+                                {pending_x + 150, pending_y + 55, 90, 35};
+
+                            if (is_mouse_inside(accept_btn, mx, my)) {
+                                ClientPacket pkt;
+                                memset(&pkt, 0, sizeof(pkt));
+                                pkt.type = MSG_FRIEND_ACCEPT;
+                                pkt.target_user_id = pending_requests[i].user_id;
+                                send(sock, &pkt, sizeof(pkt), 0);
+
+                                send_packet(MSG_FRIEND_LIST, 0);
+
+                                snprintf(notification_message,
+                                        sizeof(notification_message),
+                                        "Accepted %s's friend request!",
+                                        pending_requests[i].display_name);
+                                notification_time = SDL_GetTicks();
+                                break;
                             }
-                            // Tab switching
-                            int tab_y = 140;
-                            int tab_width = 180;
-                            int tab_height = 50;
-                            int tab_spacing = 20;
-                            int tabs_start_x = (win_w - (tab_width * 3 + tab_spacing * 2)) / 2;
-                            for (int i = 0; i < 3; i++) {
-                                SDL_Rect tab_rect = {tabs_start_x + i * (tab_width + tab_spacing), tab_y, tab_width, tab_height};
-                                if (is_mouse_inside(tab_rect, mx, my)) {
-                                    settings_active_tab = i;
-                                    break;
-                                }
+
+                            if (is_mouse_inside(decline_btn, mx, my)) {
+                                ClientPacket pkt;
+                                memset(&pkt, 0, sizeof(pkt));
+                                pkt.type = MSG_FRIEND_DECLINE;
+                                pkt.target_user_id = pending_requests[i].user_id;
+                                send(sock, &pkt, sizeof(pkt), 0);
+
+                                send_packet(MSG_FRIEND_LIST, 0);
+
+                                snprintf(notification_message,
+                                        sizeof(notification_message),
+                                        "Declined friend request");
+                                notification_time = SDL_GetTicks();
+                                break;
                             }
-                        } else if (is_mouse_inside(back_rect, mx, my)) {
+
+                            pending_y += 110;
+                        }
+
+                        /* ===== SENT REQUESTS (CANCEL) ===== */
+                        // int sent_x = 480 + 320;   // giống render
+                        // int sent_y = 134 + 46;
+
+                        // for (int i = 0; i < sent_count && i < 3; i++) {
+
+                        //     SDL_Rect cancel_btn = {
+                        //         sent_x + 240 - 110,
+                        //         sent_y + 5,
+                        //         90, 35
+                        //     };
+
+                        //     if (is_mouse_inside(cancel_btn, mx, my)) {
+                        //         ClientPacket pkt;
+                        //         memset(&pkt, 0, sizeof(pkt));
+                        //         pkt.type = MSG_FRIEND_CANCEL;
+                        //         pkt.target_user_id = sent_requests[i].user_id;
+                        //         send(sock, &pkt, sizeof(pkt), 0);
+
+                        //         snprintf(notification_message,
+                        //                 sizeof(notification_message),
+                        //                 "Cancelled friend request to %s",
+                        //                 sent_requests[i].display_name);
+                        //         notification_time = SDL_GetTicks();
+                        //         break;
+                        //     }
+
+                        //     sent_y += 55;  // spacing đúng render
+                        // }
+
+                        /* ===== SEND FRIEND REQUEST ===== */
+                        if (is_mouse_inside(btn_send_friend_request.rect, mx, my) &&
+                            strlen(inp_friend_request.text) > 0) {
+
+                            ClientPacket pkt;
+                            memset(&pkt, 0, sizeof(pkt));
+                            pkt.type = MSG_FRIEND_REQUEST;
+                            strncpy(pkt.target_display_name,
+                                    inp_friend_request.text,
+                                    MAX_DISPLAY_NAME - 1);
+                            send(sock, &pkt, sizeof(pkt), 0);
+
+                            snprintf(notification_message,
+                                    sizeof(notification_message),
+                                    "Friend request sent to %s!",
+                                    inp_friend_request.text);
+                            notification_time = SDL_GetTicks();
+                            inp_friend_request.text[0] = '\0';
+                        }
+
+                        if (is_mouse_inside((SDL_Rect){920, 40, 120, 40}, mx, my)) {
                             current_screen = SCREEN_LOBBY_LIST;
                             send_packet(MSG_LIST_LOBBIES, 0);
                         }
                     }
-                    
-                    // Text input for friend requests
-                    if (current_screen == SCREEN_FRIENDS && e.type == SDL_TEXTINPUT && inp_friend_request.is_active) {
-                        handle_text_input(&inp_friend_request, e.text.text[0]);
+
+                    /* ===== TEXT INPUT ===== */
+                    if (e.type == SDL_TEXTINPUT &&
+                        inp_friend_request.is_active) {
+                        handle_text_input(&inp_friend_request,
+                                        e.text.text[0]);
                     }
-                    
-                    if (current_screen == SCREEN_FRIENDS && e.type == SDL_KEYDOWN && inp_friend_request.is_active) {
-                        if (e.key.keysym.sym == SDLK_BACKSPACE) {
-                            handle_text_input(&inp_friend_request, '\b');
+
+                    if (e.type == SDL_KEYDOWN &&
+                        inp_friend_request.is_active &&
+                        e.key.keysym.sym == SDLK_BACKSPACE) {
+                        handle_text_input(&inp_friend_request, '\b');
+                    }
+
+                    break;
+                }
+
+                case SCREEN_PROFILE: {
+                    if (e.type == SDL_MOUSEBUTTONDOWN) {
+                        SDL_Rect back_rect = {460, 650, 200, 60};
+                        if (is_mouse_inside(back_rect, mx, my)) {
+                            current_screen = SCREEN_LOBBY_LIST;
+                            send_packet(MSG_LIST_LOBBIES, 0);
                         }
                     }
                     break;
-                    
+                }
+
+                case SCREEN_LEADERBOARD: {
+                    if (e.type == SDL_MOUSEBUTTONDOWN) {
+                        SDL_Rect back_rect = {460, 650, 200, 60};
+                        if (is_mouse_inside(back_rect, mx, my)) {
+                            current_screen = SCREEN_LOBBY_LIST;
+                            send_packet(MSG_LIST_LOBBIES, 0);
+                        }
+                    }
+                    break;
+                }
+
                 default:
                     break;
             }
@@ -1358,7 +1416,7 @@ int main(int argc, char *argv[]) {
             case SCREEN_LEADERBOARD: {
                 Button back_btn;
                 back_btn.is_hovered = is_mouse_inside(back_btn.rect, mx, my);
-                render_leaderboard_screen(rend, font_large, font_small, leaderboard, leaderboard_count, &back_btn);
+                render_leaderboard_screen(rend, font_medium, font_small, leaderboard, leaderboard_count, &back_btn);
                 break;
             }
             
