@@ -285,7 +285,7 @@ void render_friends_screen(SDL_Renderer *renderer, TTF_Font *font,
 }
 
 // Enhanced profile screen with card-based stats layout
-void render_profile_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Font *font_small,
+void render_profile_screen(SDL_Renderer *renderer, TTF_Font *font_medium, TTF_Font *font_small,
                            ProfileData *profile,
                            Button *back_btn) {
     int win_w, win_h;
@@ -295,19 +295,19 @@ void render_profile_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Fon
     
     // Title with shadow
     const char *title_text = "YOUR PROFILE";
-    SDL_Surface *title_shadow = TTF_RenderText_Blended(font_large, title_text, (SDL_Color){0, 0, 0, 120});
+    SDL_Surface *title_shadow = TTF_RenderText_Blended(font_medium, title_text, (SDL_Color){0, 0, 0, 120});
     if (title_shadow) {
         SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, title_shadow);
-        SDL_Rect rect = {(win_w - title_shadow->w) / 2 + 3, 33, title_shadow->w, title_shadow->h};
+        SDL_Rect rect = {(win_w - title_shadow->w) / 2 + 3, 30, title_shadow->w, title_shadow->h};
         SDL_RenderCopy(renderer, tex, NULL, &rect);
         SDL_DestroyTexture(tex);
         SDL_FreeSurface(title_shadow);
     }
     
-    SDL_Surface *surf = TTF_RenderText_Blended(font_large, title_text, CLR_ACCENT);
+    SDL_Surface *surf = TTF_RenderText_Blended(font_medium, title_text, CLR_ACCENT);
     if (surf) {
         SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, surf);
-        SDL_Rect rect = {(win_w - surf->w) / 2, 30, surf->w, surf->h};
+        SDL_Rect rect = {(win_w - surf->w) / 2, 27, surf->w, surf->h};
         SDL_RenderCopy(renderer, tex, NULL, &rect);
         SDL_DestroyTexture(tex);
         SDL_FreeSurface(surf);
@@ -315,10 +315,10 @@ void render_profile_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Fon
     
     if (profile) {
         // ELO card - TALLER to fit large number (was 100, now 130)
-        int elo_y = 194;
+        int elo_y = 160;
         int elo_card_w = 480;
-        int elo_card_h = 130;  // INCREASED from 100
-        SDL_Rect elo_card = {720, elo_y, elo_card_w, elo_card_h};
+        int elo_card_h = 120;  // INCREASED from 100
+        SDL_Rect elo_card = {320, elo_y, elo_card_w, elo_card_h};
         draw_layered_shadow(renderer, elo_card, UI_CORNER_RADIUS, 5);
         draw_rounded_rect(renderer, elo_card, CLR_PRIMARY, UI_CORNER_RADIUS);
         draw_rounded_border(renderer, elo_card, CLR_ACCENT, UI_CORNER_RADIUS, 2);
@@ -336,7 +336,7 @@ void render_profile_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Fon
         // Large ELO number - positioned lower to fit
         char elo_text[16];
         snprintf(elo_text, sizeof(elo_text), "%d", profile->elo_rating);
-        surf = TTF_RenderText_Blended(font_large, elo_text, CLR_ACCENT);
+        surf = TTF_RenderText_Blended(font_medium, elo_text, CLR_ACCENT);
         if (surf) {
             SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, surf);
             SDL_Rect rect = {elo_card.x + (elo_card.w - surf->w)/2, elo_y + 55, surf->w, surf->h};  // Y: 45->55
@@ -347,10 +347,10 @@ void render_profile_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Fon
         
         // 2x2 stat grid - EVEN TALLER cards with old color scheme
         int grid_y = elo_y + elo_card_h + 40;
-        int card_w = 326;
+        int card_w = 300;
         int card_h = 125;  // INCREASED from 100 to 125
         int spacing = 20;
-        int start_x = 636;
+        int start_x = 240;
         
         typedef struct {
             const char *label;
@@ -397,7 +397,7 @@ void render_profile_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Fon
             // Large value number at BOTTOM - clear separation
             char value_text[16];
             snprintf(value_text, sizeof(value_text), "%d", stats[i].value);
-            surf = TTF_RenderText_Blended(font_large, value_text, CLR_WHITE);
+            surf = TTF_RenderText_Blended(font_medium, value_text, CLR_WHITE);
             if (surf) {
                 SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, surf);
                 SDL_Rect rect = {x + (card_w - surf->w)/2, y + 65, surf->w, surf->h};  // More bottom space
@@ -409,13 +409,13 @@ void render_profile_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Fon
     }
     
     // LARGER back button - bottom center, adjusted for 1120x720
-    back_btn->rect = (SDL_Rect){860, 650, 200, 60};
+    back_btn->rect = (SDL_Rect){460, 650, 200, 60};
     strcpy(back_btn->text, "Back");
     draw_button(renderer, font_small, back_btn);
 }
 
 // Enhanced leaderboard screen with visual rank badges
-void render_leaderboard_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Font *font_small,
+void render_leaderboard_screen(SDL_Renderer *renderer, TTF_Font *font_medium, TTF_Font *font_small,
                                LeaderboardEntry *entries, int entry_count,
                                Button *back_btn) {
     int win_w, win_h;
@@ -425,26 +425,26 @@ void render_leaderboard_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF
     
     // Title with shadow
     const char *title_text = "LEADERBOARD - TOP PLAYERS";
-    SDL_Surface *title_shadow = TTF_RenderText_Blended(font_large, title_text, (SDL_Color){0, 0, 0, 120});
+    SDL_Surface *title_shadow = TTF_RenderText_Blended(font_medium, title_text, (SDL_Color){0, 0, 0, 120});
     if (title_shadow) {
         SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, title_shadow);
-        SDL_Rect rect = {(win_w - title_shadow->w) / 2 + 3, 33, title_shadow->w, title_shadow->h};
+        SDL_Rect rect = {(win_w - title_shadow->w) / 2 + 3, 30, title_shadow->w, title_shadow->h};
         SDL_RenderCopy(renderer, tex, NULL, &rect);
         SDL_DestroyTexture(tex);
         SDL_FreeSurface(title_shadow);
     }
     
-    SDL_Surface *surf = TTF_RenderText_Blended(font_large, title_text, CLR_ACCENT);
+    SDL_Surface *surf = TTF_RenderText_Blended(font_medium, title_text, CLR_ACCENT);
     if (surf) {
         SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, surf);
-        SDL_Rect rect = {(win_w - surf->w) / 2, 30, surf->w, surf->h};
+        SDL_Rect rect = {(win_w - surf->w) / 2, 27, surf->w, surf->h};
         SDL_RenderCopy(renderer, tex, NULL, &rect);
         SDL_DestroyTexture(tex);
         SDL_FreeSurface(surf);
     }
     
     // FIXED leaderboard for 1120x720
-    int y = 173;  // 16% of 720
+    int y = 120;  
     int max_entries = entry_count < 10 ? entry_count : 10;
     int row_width = 616;  // 55% of 1120
     int row_height = 65;  // Fixed height
@@ -505,7 +505,7 @@ void render_leaderboard_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF
         surf = TTF_RenderText_Blended(font_small, name_display, name_color);
         if (surf) {
             SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, surf);
-            SDL_Rect rect = {start_x + badge_size + 25, y + 18, surf->w, surf->h};  // Y: 12->18
+            SDL_Rect rect = {start_x + badge_size + 25, y + 8, surf->w, surf->h};  // Y: 12->18
             SDL_RenderCopy(renderer, tex, NULL, &rect);
             SDL_DestroyTexture(tex);
             SDL_FreeSurface(surf);
@@ -521,7 +521,7 @@ void render_leaderboard_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF
         surf = TTF_RenderText_Blended(font_small, info, info_color);
         if (surf) {
             SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, surf);
-            SDL_Rect rect = {start_x + badge_size + 25, y + 43, surf->w, surf->h};  // Y: was row_height-20, now 43 (safely in middle)
+            SDL_Rect rect = {start_x + badge_size + 25, y + 33, surf->w, surf->h};  // Y: was row_height-20, now 43 (safely in middle)
             SDL_RenderCopy(renderer, tex, NULL, &rect);
             SDL_DestroyTexture(tex);
             SDL_FreeSurface(surf);
@@ -531,7 +531,7 @@ void render_leaderboard_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF
     }
     
     // LARGER back button - bottom center
-    back_btn->rect = (SDL_Rect){860, 950, 200, 60};
+    back_btn->rect = (SDL_Rect){460, 650, 200, 60};
     strcpy(back_btn->text, "Back");
     draw_button(renderer, font_small, back_btn);
 }

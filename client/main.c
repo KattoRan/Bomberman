@@ -469,6 +469,12 @@ int main(int argc, char *argv[]) {
     if (!font_large) {
         font_large = TTF_OpenFont("C:\\Windows\\Fonts\\arialbd.ttf", 64);
     }
+
+    TTF_Font *font_medium = TTF_OpenFont("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 40);
+    if (!font_medium) {
+        font_medium = TTF_OpenFont("C:\\Windows\\Fonts\\arialbd.ttf", 40);
+    }
+
     
     // font_small now uses 26pt (updated in init_font)
     TTF_Font *font_small = init_font();
@@ -1138,7 +1144,7 @@ int main(int argc, char *argv[]) {
 
                 case SCREEN_PROFILE: {
                     if (e.type == SDL_MOUSEBUTTONDOWN) {
-                        SDL_Rect back_rect = {920, 40, 120, 40};
+                        SDL_Rect back_rect = {460, 650, 200, 60};
                         if (is_mouse_inside(back_rect, mx, my)) {
                             current_screen = SCREEN_LOBBY_LIST;
                             send_packet(MSG_LIST_LOBBIES, 0);
@@ -1149,7 +1155,7 @@ int main(int argc, char *argv[]) {
 
                 case SCREEN_LEADERBOARD: {
                     if (e.type == SDL_MOUSEBUTTONDOWN) {
-                        SDL_Rect back_rect = {920, 40, 120, 40};
+                        SDL_Rect back_rect = {460, 650, 200, 60};
                         if (is_mouse_inside(back_rect, mx, my)) {
                             current_screen = SCREEN_LOBBY_LIST;
                             send_packet(MSG_LIST_LOBBIES, 0);
@@ -1410,7 +1416,7 @@ int main(int argc, char *argv[]) {
             case SCREEN_LEADERBOARD: {
                 Button back_btn;
                 back_btn.is_hovered = is_mouse_inside(back_btn.rect, mx, my);
-                render_leaderboard_screen(rend, font_large, font_small, leaderboard, leaderboard_count, &back_btn);
+                render_leaderboard_screen(rend, font_medium, font_small, leaderboard, leaderboard_count, &back_btn);
                 break;
             }
             

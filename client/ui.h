@@ -66,11 +66,11 @@ void render_friends_screen(SDL_Renderer *renderer, TTF_Font *font,
                            FriendInfo *sent, int sent_count,
                            Button *back_btn);
 
-void render_profile_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Font *font_small,
+void render_profile_screen(SDL_Renderer *renderer, TTF_Font *font_medium, TTF_Font *font_small,
                            ProfileData *profile,
                            Button *back_btn);
 
-void render_leaderboard_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Font *font_small,
+void render_leaderboard_screen(SDL_Renderer *renderer, TTF_Font *font_medium, TTF_Font *font_small,
                                LeaderboardEntry *entries, int entry_count,
                                Button *back_btn);
 
