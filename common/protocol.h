@@ -54,6 +54,7 @@
 #define MSG_KICK_PLAYER 21
 #define MSG_SET_ROOM_PRIVATE 22
 #define MSG_LEAVE_GAME 23   // Forfeit while in-game
+#define MSG_CHAT 29         // Chat message
 
 // Message types - Server to Client
 #define MSG_AUTH_RESPONSE 20
@@ -170,6 +171,11 @@ typedef struct {
     long long end_game_time;
     int game_mode;               // Active game mode (0=Classic, 1=Sudden Death, 2=Fog of War)
     int fog_radius;              // Fog of war visibility radius in tiles (5 = default)
+    int sudden_death_timer;      // 1800 ticks (90 seconds at 20 ticks/sec)
+    int shrink_zone_left;        // Safe zone left boundary
+    int shrink_zone_right;       // Safe zone right boundary
+    int shrink_zone_top;         // Safe zone top boundary
+    int shrink_zone_bottom;      // Safe zone bottom boundary
 } GameState;
 
 // Client packet - ENHANCED
@@ -192,6 +198,7 @@ typedef struct {
     int is_private;                    // For creating private rooms
     int target_player_id;              // For kick, spectator view
     int game_mode;                     // For room creation: game mode selection
+    char chat_message[200];            // For chat messages
 } ClientPacket;
 
 // Server packet - ENHANCED
@@ -221,6 +228,12 @@ typedef struct {
         Lobby lobby;
         GameState game_state;
         ProfileData profile;
+        struct {
+            char sender_username[MAX_USERNAME];
+            char message[200];
+            uint32_t timestamp;
+            int player_id;  // For color coding
+        } chat_msg;
     } payload;
 } ServerPacket;
 

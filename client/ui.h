@@ -85,4 +85,14 @@ void render_post_match_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_
                               int winner_id, int *elo_changes, int *kills, int duration_seconds,
                               Button *rematch_btn, Button *lobby_btn, GameState *game_state);
 
+// Chat rendering functions
+void render_chat_message_block(SDL_Renderer *renderer, TTF_Font *font,
+                               const char *sender, const char *message,
+                               int player_id, int is_current_user,
+                               int x, int y, int width);
+
+void render_chat_panel_room(SDL_Renderer *renderer, TTF_Font *font,
+                            void *chat_messages, void *input_field,
+                            int chat_count);
+
 #endif

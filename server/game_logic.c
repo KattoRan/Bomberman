@@ -80,6 +80,22 @@ void init_game(GameState *state, Lobby *lobby) {
     state->match_start_time = time(NULL);  // Record start time
     state->match_duration_seconds = 0;
     
+    // Sudden Death mode initialization
+    if (lobby->game_mode == GAME_MODE_SUDDEN_DEATH) {
+        state->sudden_death_timer = 1800;  // 90 seconds * 20 ticks/sec
+        state->shrink_zone_left = 0;
+        state->shrink_zone_right = MAP_WIDTH - 1;
+        state->shrink_zone_top = 0;
+        state->shrink_zone_bottom = MAP_HEIGHT - 1;
+        printf("[GAME] Sudden Death mode: 90s timer, walls shrink every 15s\n");
+    } else {
+        state->sudden_death_timer = 0;
+        state->shrink_zone_left = 0;
+        state->shrink_zone_right = 0;
+        state->shrink_zone_top = 0;
+        state->shrink_zone_bottom = 0;
+    }
+    
     // Initialize kill tracking
     for (int i = 0; i < MAX_CLIENTS; i++) {
         state->kills[i] = 0;
@@ -259,6 +275,61 @@ void create_explosion_line(GameState *state, int sx, int sy, int dx, int dy, int
     }
 }
 
+// Sudden Death mode: Timer countdown and shrinking walls
+void apply_sudden_death_shrinking(GameState *state) {
+    if (state->game_mode != GAME_MODE_SUDDEN_DEATH) return;
+    
+    // Countdown timer
+    state->sudden_death_timer--;
+    int elapsed = 1800 - state->sudden_death_timer;
+    
+    // Shrink every 300 ticks (15 seconds)
+    if (elapsed > 0 && elapsed % 300 == 0) {
+        state->shrink_zone_left++;
+        state->shrink_zone_right--;
+        state->shrink_zone_top++;
+        state->shrink_zone_bottom--;
+        
+        printf("[SUDDEN DEATH] Walls shrinking! Safe zone: (%d,%d) to (%d,%d)\n",
+               state->shrink_zone_left, state->shrink_zone_top,
+               state->shrink_zone_right, state->shrink_zone_bottom);
+        
+        // Kill players outside safe zone
+        for (int i = 0; i < state->num_players; i++) {
+            if (state->players[i].is_alive) {
+                int px = state->players[i].x;
+                int py = state->players[i].y;
+                if (px < state->shrink_zone_left || px > state->shrink_zone_right ||
+                    py < state->shrink_zone_top || py > state->shrink_zone_bottom) {
+                    state->players[i].is_alive = 0;
+                    printf("[SUDDEN DEATH] Player %s died in death zone at (%d,%d)\n", 
+                           state->players[i].username, px, py);
+                }
+            }
+        }
+    }
+    
+    // Timer expired - end game
+    if (state->sudden_death_timer <= 0) {
+        state->game_status = GAME_ENDED;
+        
+        // Find winner by most kills
+        int max_kills = -1;
+        int winner = -1;
+        for (int i = 0; i < state->num_players; i++) {
+            if (state->kills[i] > max_kills) {
+                max_kills = state->kills[i];
+                winner = i;
+            }
+        }
+        
+        state->winner_id = winner;
+        printf("[SUDDEN DEATH] Time's up! Winner: %s with %d kills\n", 
+               (winner >= 0) ? state->players[winner].username : "DRAW",
+               max_kills);
+    }
+}
+
 void update_game(GameState *state) {
     long long now = get_time_ms();
     
@@ -343,6 +414,9 @@ void update_game(GameState *state) {
             }
         }
     }
+    
+    // Apply sudden death shrinking (if mode is active)
+    apply_sudden_death_shrinking(state);
     
     int alive = 0;
     int last_alive = -1;

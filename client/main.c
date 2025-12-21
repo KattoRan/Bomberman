@@ -132,6 +132,21 @@ Button btn_return_lobby  = {{610, 800, 250, 60}, "Return", 0};
 // Game timer tracking
 Uint32 game_start_time = 0;  // SDL ticks when game started
 
+// Chat system state
+#define MAX_CHAT_MESSAGES 50
+typedef struct {
+    char sender[MAX_USERNAME];
+    char message[200];
+    Uint32 timestamp;  // SDL_GetTicks() when received
+    int player_id;     // For color coding (0-3)
+    int is_current_user;  // 1 if this is the current user's message
+} ChatMessage;
+
+ChatMessage chat_history[MAX_CHAT_MESSAGES];
+int chat_count = 0;
+int chat_panel_open = 0;  // Toggle for gameplay (0=mini, 1=full)
+InputField inp_chat_message = {{0, 0, 600, 40}, "", "", 0, 199};  // Max 199 chars + null
+
 // --- Helper Functions ---
 
 int is_mouse_inside(SDL_Rect rect, int mx, int my) {
@@ -281,6 +296,7 @@ void process_server_packet(ServerPacket *pkt) {
                 if (current_screen != SCREEN_GAME) {
                     add_notification("Game started!", (SDL_Color){0, 255, 0, 255});
                     game_start_time = SDL_GetTicks();  // Start the timer
+                    post_match_shown = 0;  // Reset flag for new match
                 }
                 current_screen = SCREEN_GAME;
                 memset(&current_state, 0, sizeof(GameState));
@@ -420,6 +436,38 @@ void process_server_packet(ServerPacket *pkt) {
                 printf("[CLIENT] Notification: %s\n", pkt->message);
             }
             break;
+        
+        case MSG_CHAT:
+        {
+            // Store incoming chat message
+            if (chat_count < MAX_CHAT_MESSAGES) {
+                ChatMessage* msg = &chat_history[chat_count];
+                strncpy(msg->sender, pkt->payload.chat_msg.sender_username, MAX_USERNAME - 1);
+                msg->sender[MAX_USERNAME - 1] = '\0';
+                strncpy(msg->message, pkt->payload.chat_msg.message, 199);
+                msg->message[199] = '\0';
+                msg->timestamp = SDL_GetTicks();
+                msg->player_id = pkt->payload.chat_msg.player_id;
+                msg->is_current_user = (strcmp(msg->sender, my_username) == 0) ? 1 : 0;
+                chat_count++;
+            } else {
+                // Shift array and add new message (FIFO)
+                for (int i = 0; i < MAX_CHAT_MESSAGES - 1; i++) {
+                    chat_history[i] = chat_history[i + 1];
+                }
+                ChatMessage* msg = &chat_history[MAX_CHAT_MESSAGES - 1];
+                strncpy(msg->sender, pkt->payload.chat_msg.sender_username, MAX_USERNAME - 1);
+                msg->sender[MAX_USERNAME - 1] = '\0';
+                strncpy(msg->message, pkt->payload.chat_msg.message, 199);
+                msg->message[199] = '\0';
+                msg->timestamp = SDL_GetTicks();
+                msg->player_id = pkt->payload.chat_msg.player_id;
+                msg->is_current_user = (strcmp(msg->sender, my_username) == 0) ? 1 : 0;
+            }
+            
+            printf("[CLIENT] Chat - %s: %s\n", pkt->payload.chat_msg.sender_username, pkt->payload.chat_msg.message);
+            break;
+        }
     }
 }
 
@@ -869,12 +917,24 @@ int main(int argc, char *argv[]) {
                                     "Room locking coming soon!");
                             notification_time = SDL_GetTicks();
                         }
-                        // Chat button
-                        else if (is_mouse_inside((SDL_Rect){993, 15, 90, 50}, mx, my)) {
-                            // Open chat - show notification (backend not implemented)
-                            snprintf(notification_message, sizeof(notification_message),
-                                    "Chat system coming soon!");
-                            notification_time = SDL_GetTicks();
+                        // Chat button - removed (chat is always visible now)
+                        
+                        // Chat input field click (activate for typing)
+                        if (is_mouse_inside((SDL_Rect){110, 882, 600, 38}, mx, my)) {
+                            inp_chat_message.is_active = 1;
+                        }
+                        
+                        // Chat send button click
+                        else if (is_mouse_inside((SDL_Rect){718, 882, 75, 38}, mx, my)) {
+                            if (strlen(inp_chat_message.text) > 0) {
+                                ClientPacket pkt;
+                                memset(&pkt, 0, sizeof(pkt));
+                                pkt.type = MSG_CHAT;
+                                strncpy(pkt.chat_message, inp_chat_message.text, 199);
+                                send(sock, &pkt, sizeof(pkt), 0);
+                                inp_chat_message.text[0] = '\0';  // Clear input
+                                inp_chat_message.is_active = 0;
+                            }
                         }
                         // Kick buttons (host only, check for each player)
                         else if (my_player_id == current_lobby.host_id) {
@@ -895,6 +955,31 @@ int main(int argc, char *argv[]) {
                                 }
                                 card_y += 130;
                             }
+                        }
+                    }
+                    
+                    // Chat text input handling
+                    if (e.type == SDL_TEXTINPUT && inp_chat_message.is_active) {
+                        handle_text_input(&inp_chat_message, e.text.text[0]);
+                    }
+                    
+                    // Chat keyboard handling  
+                    if (e.type == SDL_KEYDOWN && inp_chat_message.is_active) {
+                        if (e.key.keysym.sym == SDLK_BACKSPACE) {
+                            handle_text_input(&inp_chat_message, '\b');
+                        }
+                        else if (e.key.keysym.sym == SDLK_RETURN && strlen(inp_chat_message.text) > 0) {
+                            // Send chat message on Enter
+                            ClientPacket pkt;
+                            memset(&pkt, 0, sizeof(pkt));
+                            pkt.type = MSG_CHAT;
+                            strncpy(pkt.chat_message, inp_chat_message.text, 199);
+                            send(sock, &pkt, sizeof(pkt), 0);
+                            inp_chat_message.text[0] = '\0';  // Clear
+                            inp_chat_message.is_active = 0;
+                        }
+                        else if (e.key.keysym.sym == SDLK_ESCAPE) {
+                            inp_chat_message.is_active = 0;  // Cancel typing
                         }
                     }
                     break;
@@ -1163,6 +1248,40 @@ int main(int argc, char *argv[]) {
                     }
                     break;
                 }
+                
+                case SCREEN_SETTINGS: {
+                    if (e.type == SDL_MOUSEBUTTONDOWN) {
+                        int win_w, win_h;
+                        SDL_GetRendererOutputSize(rend, &win_w, &win_h);
+                        
+                        // Back button
+                        if (is_mouse_inside((SDL_Rect){980, 850, 200, 60}, mx, my)) {
+                            current_screen = SCREEN_LOBBY_LIST;
+                            send_packet(MSG_LIST_LOBBIES, 0);
+                        }
+                        
+                        // Tab switching (3 tabs)
+                        int tab_y = 140;
+                        int tab_width = 180;
+                        int tab_height = 50;
+                        int tab_spacing = 20;
+                        int tabs_start_x = (win_w - (tab_width * 3 + tab_spacing * 2)) / 2;
+                        
+                        for (int i = 0; i < 3; i++) {
+                            SDL_Rect tab_rect = {
+                                tabs_start_x + i * (tab_width + tab_spacing), 
+                                tab_y, 
+                                tab_width, 
+                                tab_height
+                            };
+                            if (is_mouse_inside(tab_rect, mx, my)) {
+                                settings_active_tab = i;
+                                break;
+                            }
+                        }
+                    }
+                    break;
+                }
 
                 default:
                     break;
@@ -1297,6 +1416,9 @@ int main(int argc, char *argv[]) {
                     &current_lobby, my_player_id,
                     ready_ptr, start_ptr, &btn_leave
                 );
+                
+                // Render chat panel
+                render_chat_panel_room(rend, font_small, chat_history, &inp_chat_message, chat_count);
                 break;
             }
 
@@ -1416,7 +1538,7 @@ int main(int argc, char *argv[]) {
             case SCREEN_LEADERBOARD: {
                 Button back_btn;
                 back_btn.is_hovered = is_mouse_inside(back_btn.rect, mx, my);
-                render_leaderboard_screen(rend, font_medium, font_small, leaderboard, leaderboard_count, &back_btn);
+                render_leaderboard_screen(rend, font_large, font_small, leaderboard, leaderboard_count, &back_btn);
                 break;
             }
             
