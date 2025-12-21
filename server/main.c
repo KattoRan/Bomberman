@@ -24,6 +24,22 @@ typedef struct {
 ClientInfo clients[MAX_CLIENTS * MAX_LOBBIES];
 int num_clients = 0;
 
+// Chat history storage (server-side only)
+#define MAX_CHAT_HISTORY 50
+typedef struct {
+    char sender_username[MAX_USERNAME];
+    char message[200];
+    uint32_t timestamp;
+    int player_id;
+} ChatHistoryEntry;
+
+typedef struct {
+    ChatHistoryEntry messages[MAX_CHAT_HISTORY];
+    int count;
+} LobbyChat;
+
+LobbyChat lobby_chats[MAX_LOBBIES];
+
 // Helper function to check if a user is online
 int is_user_online(int user_id) {
     for (int i = 0; i < num_clients; i++) {
@@ -540,6 +556,81 @@ void handle_client_packet(int socket_fd, ClientPacket *pkt) {
                 send_response(socket_fd, &response);
             }
             break;
+        
+        case MSG_CHAT:
+        {
+            if (!client->is_authenticated || client->lobby_id < 0) {
+                break;  // Ignore if not authenticated or not in lobby
+            }
+            
+            // Validate message length
+            pkt->chat_message[199] = '\0';  // Force null termination
+            int msg_len = strlen(pkt->chat_message);
+            if (msg_len == 0 || msg_len > 199) {
+                break;  // Ignore empty or too long messages
+            }
+            
+            // Find sender's player ID in the lobby
+            Lobby* lobby = find_lobby(client->lobby_id);
+            if (!lobby) break;
+            
+            int sender_player_id = -1;
+            for (int i = 0; i < lobby->num_players; i++) {
+                if (strcmp(lobby->players[i].username, client->username) == 0) {
+                    sender_player_id = i;
+                    break;
+                }
+            }
+            
+            if (sender_player_id < 0) break;  // Sender not found in lobby
+            
+            // Store in chat history
+            LobbyChat* chat = &lobby_chats[client->lobby_id];
+            if (chat->count < MAX_CHAT_HISTORY) {
+                ChatHistoryEntry* entry = &chat->messages[chat->count];
+                strncpy(entry->sender_username, client->username, MAX_USERNAME - 1);
+                entry->sender_username[MAX_USERNAME - 1] = '\0';
+                strncpy(entry->message, pkt->chat_message, 199);
+                entry->message[199] = '\0';
+                entry->timestamp = (uint32_t)time(NULL);
+                entry->player_id = sender_player_id;
+                chat->count++;
+            } else {
+                // Shift array and add new message (FIFO)
+                for (int i = 0; i < MAX_CHAT_HISTORY - 1; i++) {
+                    chat->messages[i] = chat->messages[i + 1];
+                }
+                ChatHistoryEntry* entry = &chat->messages[MAX_CHAT_HISTORY - 1];
+                strncpy(entry->sender_username, client->username, MAX_USERNAME - 1);
+                entry->sender_username[MAX_USERNAME - 1] = '\0';
+                strncpy(entry->message, pkt->chat_message, 199);
+                entry->message[199] = '\0';
+                entry->timestamp = (uint32_t)time(NULL);
+                entry->player_id = sender_player_id;
+            }
+            
+            // Broadcast to all players in the lobby
+            ServerPacket chat_msg;
+            memset(&chat_msg, 0, sizeof(ServerPacket));
+            chat_msg.type = MSG_CHAT;
+            chat_msg.code = 0;
+            strncpy(chat_msg.payload.chat_msg.sender_username, client->username, MAX_USERNAME - 1);
+            chat_msg.payload.chat_msg.sender_username[MAX_USERNAME - 1] = '\0';
+            strncpy(chat_msg.payload.chat_msg.message, pkt->chat_message, 199);
+            chat_msg.payload.chat_msg.message[199] = '\0';
+            chat_msg.payload.chat_msg.timestamp = (uint32_t)time(NULL);
+            chat_msg.payload.chat_msg.player_id = sender_player_id;
+            
+            // Send to all clients in the same lobby
+            for (int i = 0; i < num_clients; i++) {
+                if (clients[i].lobby_id == client->lobby_id && clients[i].is_authenticated) {
+                    send_response(clients[i].socket_fd, &chat_msg);
+                }
+            }
+            
+            printf("[CHAT] Lobby %d - %s: %s\n", client->lobby_id, client->username, pkt->chat_message);
+            break;
+        }
     }
 }
 

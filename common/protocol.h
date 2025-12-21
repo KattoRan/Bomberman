@@ -54,6 +54,7 @@
 #define MSG_KICK_PLAYER 21
 #define MSG_SET_ROOM_PRIVATE 22
 #define MSG_LEAVE_GAME 23   // Forfeit while in-game
+#define MSG_CHAT 29         // Chat message
 
 // Message types - Server to Client
 #define MSG_AUTH_RESPONSE 20
@@ -192,6 +193,7 @@ typedef struct {
     int is_private;                    // For creating private rooms
     int target_player_id;              // For kick, spectator view
     int game_mode;                     // For room creation: game mode selection
+    char chat_message[200];            // For chat messages
 } ClientPacket;
 
 // Server packet - ENHANCED
@@ -221,6 +223,12 @@ typedef struct {
         Lobby lobby;
         GameState game_state;
         ProfileData profile;
+        struct {
+            char sender_username[MAX_USERNAME];
+            char message[200];
+            uint32_t timestamp;
+            int player_id;  // For color coding
+        } chat_msg;
     } payload;
 } ServerPacket;
 
