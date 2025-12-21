@@ -615,13 +615,61 @@ void render_game(SDL_Renderer *renderer, TTF_Font *font, int tick, int my_player
     extern void draw_fog_overlay(SDL_Renderer*, GameState*, int);
     draw_fog_overlay(renderer, &current_state, my_player_id);
 
+    // Render sudden death death zones (if in sudden death mode)
+    if (current_state.game_mode == GAME_MODE_SUDDEN_DEATH) {
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+        
+        // Draw red overlay for death zones
+        for (int y = 0; y < MAP_HEIGHT; y++) {
+            for (int x = 0; x < MAP_WIDTH; x++) {
+                int in_death_zone = 0;
+                if (x < current_state.shrink_zone_left || x > current_state.shrink_zone_right ||
+                    y < current_state.shrink_zone_top || y > current_state.shrink_zone_bottom) {
+                    in_death_zone = 1;
+                }
+                
+                if (in_death_zone) {
+                    SDL_Rect death_rect = {x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE};
+                    // Pulsing red overlay
+                    int pulse = (int)(sinf(tick * 0.1f) * 30 + 80);
+                    SDL_SetRenderDrawColor(renderer, 255, 0, 0, pulse);
+                    SDL_RenderFillRect(renderer, &death_rect);
+                }
+            }
+        }
+        
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+    }
+
     // === HUD - Match Timer (Top Center) ===
-    int minutes = elapsed_seconds / 60;
-    int seconds = elapsed_seconds % 60;
     char timer_text[32];
-    snprintf(timer_text, sizeof(timer_text), "%d:%02d", minutes, seconds);
+    SDL_Color timer_color = {255, 255, 255, 255};
     
-    SDL_Color timer_color = {255, 255, 255, 255};  // White
+    if (current_state.game_mode == GAME_MODE_SUDDEN_DEATH) {
+        // Display sudden death countdown
+        int remaining_ticks = current_state.sudden_death_timer;
+        int remaining_seconds = remaining_ticks / 20;  // 20 ticks per second
+        int minutes = remaining_seconds / 60;
+        int seconds = remaining_seconds % 60;
+        snprintf(timer_text, sizeof(timer_text), "⏱ %d:%02d", minutes, seconds);
+        
+        // Color code based on time remaining
+        if (remaining_seconds <= 15) {
+            timer_color = (SDL_Color){255, 0, 0, 255};  // Red - critical!
+        } else if (remaining_seconds <= 30) {
+            timer_color = (SDL_Color){255, 165, 0, 255};  // Orange - warning
+        } else if (remaining_seconds <= 60) {
+            timer_color = (SDL_Color){255, 255, 0, 255};  // Yellow - caution
+        } else {
+            timer_color = (SDL_Color){0, 255, 0, 255};  // Green - safe
+        }
+    } else {
+        // Regular match timer
+        int minutes = elapsed_seconds / 60;
+        int seconds = elapsed_seconds % 60;
+        snprintf(timer_text, sizeof(timer_text), "%d:%02d", minutes, seconds);
+    }
+    
     SDL_Surface *timer_surf = TTF_RenderText_Blended(font, timer_text, timer_color);
     if (timer_surf) {
         SDL_Texture *timer_tex = SDL_CreateTextureFromSurface(renderer, timer_surf);

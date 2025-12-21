@@ -171,6 +171,11 @@ typedef struct {
     long long end_game_time;
     int game_mode;               // Active game mode (0=Classic, 1=Sudden Death, 2=Fog of War)
     int fog_radius;              // Fog of war visibility radius in tiles (5 = default)
+    int sudden_death_timer;      // 1800 ticks (90 seconds at 20 ticks/sec)
+    int shrink_zone_left;        // Safe zone left boundary
+    int shrink_zone_right;       // Safe zone right boundary
+    int shrink_zone_top;         // Safe zone top boundary
+    int shrink_zone_bottom;      // Safe zone bottom boundary
 } GameState;
 
 // Client packet - ENHANCED

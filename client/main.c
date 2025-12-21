@@ -293,6 +293,7 @@ void process_server_packet(ServerPacket *pkt) {
                 if (current_screen != SCREEN_GAME) {
                     add_notification("Game đã bắt đầu!", (SDL_Color){0, 255, 0, 255});
                     game_start_time = SDL_GetTicks();  // Start the timer
+                    post_match_shown = 0;  // Reset flag for new match
                 }
                 current_screen = SCREEN_GAME;
                 memset(&current_state, 0, sizeof(GameState));
