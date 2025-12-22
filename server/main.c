@@ -382,6 +382,23 @@ void handle_client_packet(int socket_fd, ClientPacket *pkt) {
                     // THÊM: Initialize game update timer
                     last_game_update[client->lobby_id] = get_current_time_ms();
                     
+                    
+                    // CRITICAL FIX: Set player_id_in_game for each client in this lobby
+                    // This is needed for fog of war filtering to work correctly
+                    GameState *gs = &active_games[client->lobby_id];
+                    for (int i = 0; i < num_clients; i++) {
+                        if (clients[i].lobby_id == client->lobby_id) {
+                            // Find this client's player ID in the game state
+                            for (int p = 0; p < gs->num_players; p++) {
+                                if (strcmp(clients[i].username, gs->players[p].username) == 0) {
+                                    clients[i].player_id_in_game = p;
+                                    printf("[FOG] Set player_id_in_game for %s: %d\n", 
+                                           clients[i].username, p);
+                                    break;
+                                }
+                            }
+                        }
+                    }
                     broadcast_lobby_update(client->lobby_id);
                     broadcast_game_state(client->lobby_id);
                 }
