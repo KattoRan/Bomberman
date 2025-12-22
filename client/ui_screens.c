@@ -762,8 +762,8 @@ void render_lobby_room_screen(SDL_Renderer *renderer, TTF_Font *font,
     
     // Player list with LARGER cards
     int y = 120;  // Start a bit lower after title
-    int card_width = 640;  
-    int start_x = (win_w - card_width) / 2;
+    int card_width = 440;  
+    int start_x = 80;
 
     for (int i = 0; i < lobby->num_players; i++) {
         Player *p = &lobby->players[i];
@@ -843,7 +843,7 @@ void render_lobby_room_screen(SDL_Renderer *renderer, TTF_Font *font,
             
             // Role badge - aligned below username
             if (i == lobby->host_id) {
-                SDL_Rect host_badge = {start_x + 520, y + 26, 80, 28};
+                SDL_Rect host_badge = {start_x + 320, y + 26, 80, 28};
                 draw_rounded_rect(renderer, host_badge, (SDL_Color){167, 139, 250, 255}, 4);
                 
                 SDL_Surface *host_surf = TTF_RenderText_Blended(font, "HOST", 
@@ -863,7 +863,7 @@ void render_lobby_room_screen(SDL_Renderer *renderer, TTF_Font *font,
             
             // Status badge on right - LARGER
             if (i != lobby->host_id) {
-                SDL_Rect status_badge = {start_x + 495, y + 26, 130, 28};
+                SDL_Rect status_badge = {start_x + 295, y + 26, 130, 28};
                 SDL_Color badge_color = p->is_ready ? CLR_SUCCESS : 
                     (SDL_Color){71, 85, 105, 255};
                 draw_rounded_rect(renderer, status_badge, badge_color, 6);
@@ -888,7 +888,7 @@ void render_lobby_room_screen(SDL_Renderer *renderer, TTF_Font *font,
                 if (my_player_id == lobby->host_id) {
 
                     Button btn_kick = {
-                        .rect = {start_x + 380, y + 26, 90, 28},
+                        .rect = {start_x + 180, y + 26, 90, 28},
                         .is_hovered = 0,
                         .type = BTN_DANGER
                     };
@@ -902,12 +902,11 @@ void render_lobby_room_screen(SDL_Renderer *renderer, TTF_Font *font,
         y += card_height + 20;  // 20px spacing (was 15)
     }
     
-    // Vẽ các nút ở dưới cùng - CÂN GIỮA
-    int button_y = win_h - 120;
+    int button_y = win_h - 90;
     int center_x = win_w / 2;
     
     // Cập nhật vị trí nút Leave (luôn hiện)
-    leave_btn->rect.x = center_x + 120;
+    leave_btn->rect.x = 320;
     leave_btn->rect.y = button_y;
     leave_btn->rect.w = 200;
     leave_btn->rect.h = 50;
@@ -916,7 +915,7 @@ void render_lobby_room_screen(SDL_Renderer *renderer, TTF_Font *font,
     if (my_player_id == lobby->host_id) {
         // Host chỉ thấy Start Game và Leave
         if (start_btn) {
-            start_btn->rect.x = center_x - 320;
+            start_btn->rect.x = 80;
             start_btn->rect.y = button_y;
             start_btn->rect.w = 200;
             start_btn->rect.h = 50;
@@ -925,7 +924,7 @@ void render_lobby_room_screen(SDL_Renderer *renderer, TTF_Font *font,
     } else {
         // Người chơi thường chỉ thấy Ready và Leave
         if (ready_btn) {
-            ready_btn->rect.x = center_x - 320;
+            ready_btn->rect.x = 80;
             ready_btn->rect.y = button_y;
             ready_btn->rect.w = 200;
             ready_btn->rect.h = 50;
@@ -944,7 +943,7 @@ void render_lobby_room_screen(SDL_Renderer *renderer, TTF_Font *font,
             int msg_width = msg_surf->w + 40;
             int msg_height = msg_surf->h + 20;
             int msg_x = (win_w - msg_width) / 2;
-            int msg_y = button_y - msg_height - 20;
+            int msg_y = 15;
             
             // Shadow
             SDL_Rect shadow = {msg_x + 2, msg_y + 2, msg_width, msg_height};
@@ -1155,7 +1154,7 @@ void render_chat_message_block(SDL_Renderer *renderer, TTF_Font *font,
                                const char *sender, const char *message,
                                int player_id, int is_current_user,
                                int x, int y, int width) {
-    int card_height = 55;  // Compact height for 2-line message
+    int card_height = 70;  // Compact height for 2-line message
     SDL_Rect card_rect = {x, y, width, card_height};
     
     // Background color based on current user
@@ -1227,10 +1226,10 @@ void render_chat_panel_room(SDL_Renderer *renderer, TTF_Font *font,
     ChatMessageLocal *messages = (ChatMessageLocal*)chat_messages;
     InputField *input = (InputField*)input_field;
     
-    int panel_x = 100;
-    int panel_y = 690;  // Moved up from 720
-    int panel_w = 700;
-    int panel_h = 250;  // Increased from 200
+    int panel_x = 600;
+    int panel_y = 120;  // Moved up from 720
+    int panel_w = 440;
+    int panel_h = 560;  // Increased from 200
     
     // Panel background
     SDL_Rect panel_bg = {panel_x, panel_y, panel_w, panel_h};
@@ -1259,17 +1258,17 @@ void render_chat_panel_room(SDL_Renderer *renderer, TTF_Font *font,
     // Messages area (show last 3 messages)
     int msg_area_y = panel_y + 42;
     
-    int start_idx = (chat_count > 3) ? (chat_count - 3) : 0;
+    int start_idx = (chat_count > 6) ? (chat_count - 6) : 0;
     int msg_y = msg_area_y;
     
-    for (int i = start_idx; i < chat_count && i < start_idx + 3; i++) {
+    for (int i = start_idx; i < chat_count && i < start_idx + 6; i++) {
         render_chat_message_block(renderer, font,
                                  messages[i].sender,
                                  messages[i].message,
                                  messages[i].player_id,
                                  messages[i].is_current_user,
                                  panel_x + 10, msg_y, panel_w - 20);
-        msg_y += 60;  // Message height + spacing
+        msg_y += 75;  // Message height + spacing
     }
     
     // Input field at bottom
