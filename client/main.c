@@ -259,7 +259,21 @@ void process_server_packet(ServerPacket *pkt) {
                 
                 printf("[CLIENT] Authenticated as: %s\n", my_username);
             } else {
-                strncpy(status_message, pkt->message, sizeof(status_message));
+                if (pkt->code == AUTH_USER_EXISTS) {
+                    strncpy(status_message,
+                            "Email and username are taken. Try another.",
+                            sizeof(status_message));
+                } else if (pkt->code == AUTH_USERNAME_EXISTS) {
+                    strncpy(status_message,
+                            "Username is taken. Try another.",
+                            sizeof(status_message));
+                } else if (pkt->code == AUTH_EMAIL_EXISTS) {
+                    strncpy(status_message,
+                            "Email is taken. Try another.",
+                            sizeof(status_message));
+                } else {
+                    strncpy(status_message, pkt->message, sizeof(status_message));
+                }
             }
             break;
 
@@ -1571,7 +1585,10 @@ int main(int argc, char *argv[]) {
         }
         
         // Render notifications at top center - MODERNIZED
-        if (notification_message[0] != '\0' && SDL_GetTicks() - notification_time < NOTIFICATION_DURATION) {
+        if (current_screen != SCREEN_LOGIN &&
+            current_screen != SCREEN_REGISTER &&
+            notification_message[0] != '\0' &&
+            SDL_GetTicks() - notification_time < NOTIFICATION_DURATION) {
             int win_w, win_h;
             SDL_GetRendererOutputSize(rend, &win_w, &win_h);
             

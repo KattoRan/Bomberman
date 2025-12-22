@@ -249,7 +249,17 @@ void handle_client_packet(int socket_fd, ClientPacket *pkt) {
                         strcpy(response.message, "Registration successful");
                     }
                 } else {
-                    strcpy(response.message, "Registration failed");
+                    if (response.code == AUTH_USERNAME_EXISTS) {
+                        strcpy(response.message, "Username is taken. Try another.");
+                    } else if (response.code == AUTH_EMAIL_EXISTS) {
+                        strcpy(response.message, "Email is taken. Try another.");
+                    } else if (response.code == AUTH_USER_EXISTS) {
+                        strcpy(response.message, "Email and username are taken. Try another.");
+                    } else if (response.code == AUTH_INVALID) {
+                        strcpy(response.message, "Invalid registration data");
+                    } else {
+                        strcpy(response.message, "Registration failed");
+                    }
                 }
                 send_response(socket_fd, &response);
             }

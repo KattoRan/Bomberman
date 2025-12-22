@@ -132,24 +132,57 @@ int db_register_user(const char *username, const char *email, const char *passwo
         return AUTH_INVALID;
     }
     
-    // Check if username or email already exists
+    // Check if username/email already exists
+    int username_exists = 0;
+    int email_exists = 0;
+
     sqlite3_stmt *stmt;
-    const char *check_sql = "SELECT id FROM Users WHERE username = ? OR email = ?";
+    const char *check_user_sql = "SELECT id FROM Users WHERE username = ?";
     
-    if (sqlite3_prepare_v2(db, check_sql, -1, &stmt, NULL) != SQLITE_OK) {
+    if (sqlite3_prepare_v2(db, check_user_sql, -1, &stmt, NULL) != SQLITE_OK) {
         fprintf(stderr, "[DB] Prepare failed: %s\n", sqlite3_errmsg(db));
         return AUTH_FAILED;
     }
     
     sqlite3_bind_text(stmt, 1, username, -1, SQLITE_STATIC);
-    sqlite3_bind_text(stmt, 2, email, -1, SQLITE_STATIC);
     
     int rc = sqlite3_step(stmt);
     sqlite3_finalize(stmt);
     
     if (rc == SQLITE_ROW) {
-        printf("[DB] Username or email already exists\n");
+        username_exists = 1;
+    }
+    
+    // Check if email already exists
+    const char *check_email_sql = "SELECT id FROM Users WHERE email = ?";
+    
+    if (sqlite3_prepare_v2(db, check_email_sql, -1, &stmt, NULL) != SQLITE_OK) {
+        fprintf(stderr, "[DB] Prepare failed: %s\n", sqlite3_errmsg(db));
+        return AUTH_FAILED;
+    }
+    
+    sqlite3_bind_text(stmt, 1, email, -1, SQLITE_STATIC);
+    
+    rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    
+    if (rc == SQLITE_ROW) {
+        email_exists = 1;
+    }
+
+    if (username_exists && email_exists) {
+        printf("[DB] Username and email already exist\n");
         return AUTH_USER_EXISTS;
+    }
+
+    if (username_exists) {
+        printf("[DB] Username already exists\n");
+        return AUTH_USERNAME_EXISTS;
+    }
+
+    if (email_exists) {
+        printf("[DB] Email already exists\n");
+        return AUTH_EMAIL_EXISTS;
     }
     
     // Generate salt and hash password

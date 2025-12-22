@@ -88,6 +88,8 @@
 #define AUTH_FAILED 1           // Alias for backward compatibility
 #define AUTH_USER_EXISTS 2
 #define AUTH_INVALID 3
+#define AUTH_USERNAME_EXISTS 4
+#define AUTH_EMAIL_EXISTS 5
 
 // Server response codes (errors)
 #define ERR_LOBBY_NOT_FOUND -2
