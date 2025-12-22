@@ -76,9 +76,9 @@ Button btn_leaderboard = {{1000, 20, 80, 50}, "Top", 0, BTN_OUTLINE};
 
 
 // Lobby room buttons
-Button btn_ready = {{260, 600, 220, 60}, "Ready", 0, BTN_PRIMARY};
-Button btn_start = {{500, 600, 300, 60}, "Start Game", 0, BTN_PRIMARY};
-Button btn_leave = {{820, 600, 220, 60}, "Leave", 0, BTN_DANGER};
+Button btn_ready = {{80, 630, 200, 50}, "Ready", 0, BTN_PRIMARY};
+Button btn_start = {{80, 630, 200, 50}, "Start Game", 0, BTN_PRIMARY};
+Button btn_leave = {{320, 630, 200, 50}, "Leave", 0, BTN_DANGER};
 
 
 // Lobby room - host-only buttons
@@ -935,12 +935,12 @@ int main(int argc, char *argv[]) {
                         // Chat button - removed (chat is always visible now)
                         
                         // Chat input field click (activate for typing)
-                        if (is_mouse_inside((SDL_Rect){110, 882, 600, 38}, mx, my)) {
+                        if (is_mouse_inside((SDL_Rect){610, 632, 340, 38}, mx, my)) {
                             inp_chat_message.is_active = 1;
                         }
                         
                         // Chat send button click
-                        else if (is_mouse_inside((SDL_Rect){718, 882, 75, 38}, mx, my)) {
+                        else if (is_mouse_inside((SDL_Rect){958, 632, 75, 38}, mx, my)) {
                             if (strlen(inp_chat_message.text) > 0) {
                                 ClientPacket pkt;
                                 memset(&pkt, 0, sizeof(pkt));
@@ -953,13 +953,13 @@ int main(int argc, char *argv[]) {
                         }
                         // Kick buttons (host only, check for each player)
                         else if (my_player_id == current_lobby.host_id) {
-                            int card_y = 200;
-                            int card_width = 616;
-                            int start_x = (1120 - card_width) / 2;
+                            int card_y = 120;
+                            int card_width = 440;
+                            int start_x = 80;
                             
                             for (int i = 0; i < current_lobby.num_players; i++) {
                                 if (i != current_lobby.host_id) {
-                                    SDL_Rect kick_btn = {start_x + card_width - 230, card_y + 35, 90, 40};
+                                    SDL_Rect kick_btn = {start_x + 180, card_y + 26, 90, 28};
                                     if (is_mouse_inside(kick_btn, mx, my)) {
                                         // Kick player - show notification (backend not implemented)
                                         snprintf(notification_message, sizeof(notification_message),
@@ -968,7 +968,7 @@ int main(int argc, char *argv[]) {
                                         break;
                                     }
                                 }
-                                card_y += 130;
+                                card_y += 95;
                             }
                         }
                     }
