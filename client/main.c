@@ -12,6 +12,7 @@
 extern void render_game(SDL_Renderer*, TTF_Font*, int, int, int);
 extern TTF_Font* init_font();
 extern void add_notification(const char *text, SDL_Color color);
+extern SDL_Rect get_game_leave_button_rect();
 
 // State
 typedef enum {
@@ -999,7 +1000,28 @@ int main(int argc, char *argv[]) {
                     break;
                     
                 case SCREEN_GAME:
+                    if (e.type == SDL_MOUSEBUTTONDOWN) {
+                        SDL_Rect leave_btn = get_game_leave_button_rect();
+                        if (is_mouse_inside(leave_btn, mx, my)) {
+                            send_packet(MSG_LEAVE_GAME, 0);
+                            current_screen = SCREEN_LOBBY_LIST;
+                            send_packet(MSG_LIST_LOBBIES, 0);
+                            lobby_error_message[0] = '\0';
+                            my_player_id = -1;
+                            break;
+                        }
+                    }
+
                     if (e.type == SDL_KEYDOWN) {
+                        if (e.key.keysym.sym == SDLK_ESCAPE) {
+                            send_packet(MSG_LEAVE_GAME, 0);
+                            current_screen = SCREEN_LOBBY_LIST;
+                            send_packet(MSG_LIST_LOBBIES, 0);
+                            lobby_error_message[0] = '\0';
+                            my_player_id = -1;
+                            break;
+                        }
+
                         ClientPacket pkt;
                         memset(&pkt, 0, sizeof(pkt));
                         pkt.type = MSG_MOVE;

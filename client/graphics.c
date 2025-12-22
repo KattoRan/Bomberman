@@ -12,6 +12,15 @@
 #define MAX_PARTICLES 200
 
 extern GameState current_state;
+extern Lobby current_lobby;
+extern char my_username[MAX_USERNAME];
+
+// Sidebar layout
+static const int SIDEBAR_PADDING = 16;
+static const int LINE_HEIGHT = 22;
+static const int LINE_GAP = 6;
+static const int SECTION_GAP_SMALL = 14;
+static const int SECTION_GAP = 18;
 
 // ===== PARTICLE SYSTEM =====
 typedef struct {
@@ -173,6 +182,17 @@ const SDL_Color COLOR_POWERUP_BOMB = {255, 215, 0, 255};
 const SDL_Color COLOR_POWERUP_FIRE = {255, 69, 0, 255};
 const SDL_Color COLOR_POWERUP_SPEED = {50, 205, 50, 255};
 
+// Text palette for sidebar
+static const SDL_Color COLOR_TEXT_PRIMARY = {237, 237, 237, 255};
+static const SDL_Color COLOR_TEXT_MUTED   = {168, 168, 168, 255};
+static const SDL_Color COLOR_TEXT_ACCENT  = {205, 187, 138, 255};
+static const SDL_Color COLOR_TEXT_OK      = {61, 220, 151, 255};
+static const SDL_Color COLOR_TEXT_BAD     = {220, 60, 60, 255};
+static const SDL_Color COLOR_DIVIDER      = {42, 42, 42, 255};
+
+// Leave button placement in game HUD
+static SDL_Rect game_leave_btn = {WINDOW_WIDTH - 170, MAP_HEIGHT * TILE_SIZE + 18, 160, 40};
+
 // Hệ thống thông báo
 typedef struct {
     char text[128];
@@ -194,6 +214,27 @@ void add_notification(const char *text, SDL_Color color) {
             break;
         }
     }
+}
+
+SDL_Rect get_game_leave_button_rect() {
+    return game_leave_btn;
+}
+
+static void draw_text(SDL_Renderer *renderer, TTF_Font *font, const char *text, int x, int y, SDL_Color color) {
+    if (!font || !text) return;
+    SDL_Surface *surf = TTF_RenderText_Blended(font, text, color);
+    if (!surf) return;
+    SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, surf);
+    SDL_Rect rect = {x, y, surf->w, surf->h};
+    SDL_RenderCopy(renderer, tex, NULL, &rect);
+    SDL_DestroyTexture(tex);
+    SDL_FreeSurface(surf);
+}
+
+static void draw_divider(SDL_Renderer *renderer, int x, int y, int w) {
+    SDL_SetRenderDrawColor(renderer, COLOR_DIVIDER.r, COLOR_DIVIDER.g, COLOR_DIVIDER.b, COLOR_DIVIDER.a);
+    SDL_Rect line = {x, y, w, 1};
+    SDL_RenderFillRect(renderer, &line);
 }
 
 void draw_tile(SDL_Renderer *renderer, int x, int y, SDL_Color color, int draw_border) {
@@ -551,13 +592,127 @@ void draw_status_bar(SDL_Renderer *renderer, TTF_Font *font, int my_player_id) {
                                       (SDL_Color){255, 215, 0, 255});
             if (pu_surface) {
                 SDL_Texture *pu_texture = SDL_CreateTextureFromSurface(renderer, pu_surface);
-                SDL_Rect pu_rect = {WINDOW_WIDTH - pu_surface->w - 10, 
+                int right_padding = game_leave_btn.w + 20;
+                SDL_Rect pu_rect = {WINDOW_WIDTH - pu_surface->w - right_padding, 
                                    bar_y + 15, pu_surface->w, pu_surface->h};
                 SDL_RenderCopy(renderer, pu_texture, NULL, &pu_rect);
                 SDL_DestroyTexture(pu_texture);
                 SDL_FreeSurface(pu_surface);
             }
         }
+    }
+}
+
+static void draw_sidebar(SDL_Renderer *renderer, TTF_Font *font, int my_player_id, int elapsed_seconds) {
+    if (!font) return;
+
+    int win_w, win_h;
+    SDL_GetRendererOutputSize(renderer, &win_w, &win_h);
+    int sidebar_x = WINDOW_WIDTH + SIDEBAR_PADDING;
+    int sidebar_w = win_w - sidebar_x - SIDEBAR_PADDING;
+    if (sidebar_w < 140) return;
+
+    SDL_Rect bg = {WINDOW_WIDTH, 0, win_w - WINDOW_WIDTH, win_h};
+    SDL_SetRenderDrawColor(renderer, 18, 18, 18, 255);
+    SDL_RenderFillRect(renderer, &bg);
+
+    int y = SIDEBAR_PADDING;
+    SDL_Color player_colors[] = {COLOR_PLAYER1, COLOR_PLAYER2, COLOR_PLAYER3, COLOR_PLAYER4};
+
+    draw_text(renderer, font, my_username, sidebar_x, y, COLOR_TEXT_PRIMARY);
+    y += LINE_HEIGHT + LINE_GAP;
+
+    const char *tier_name = "Bronze";
+    int my_elo = 0;
+    if (my_player_id >= 0 && my_player_id < current_state.num_players) {
+        my_elo = current_state.players[my_player_id].elo_rating;
+    }
+    if (my_elo >= 2000) tier_name = "Diamond";
+    else if (my_elo >= 1500) tier_name = "Gold";
+    else if (my_elo >= 1000) tier_name = "Silver";
+
+    {
+        char profile_line[128];
+        snprintf(profile_line, sizeof(profile_line), "Rank: %s", tier_name);
+        draw_text(renderer, font, profile_line, sidebar_x, y, COLOR_TEXT_MUTED);
+        y += LINE_HEIGHT;
+        snprintf(profile_line, sizeof(profile_line), "ELO: %d", my_elo);
+        draw_text(renderer, font, profile_line, sidebar_x, y, COLOR_TEXT_MUTED);
+        y += LINE_HEIGHT + SECTION_GAP_SMALL;
+    }
+
+    draw_divider(renderer, sidebar_x, y, sidebar_w - SIDEBAR_PADDING);
+    y += LINE_GAP;
+
+    draw_text(renderer, font, "Room", sidebar_x, y, COLOR_TEXT_ACCENT);
+    y += LINE_HEIGHT;
+    if (current_lobby.id >= 0) {
+        char line[160];
+        snprintf(line, sizeof(line), "%s", current_lobby.name);
+        draw_text(renderer, font, line, sidebar_x, y, COLOR_TEXT_PRIMARY);
+        y += LINE_HEIGHT;
+        draw_text(renderer, font, current_lobby.is_private ? "Private" : "Public",
+                  sidebar_x, y, COLOR_TEXT_MUTED);
+        y += LINE_HEIGHT;
+        if (current_lobby.is_private && current_lobby.access_code[0]) {
+            snprintf(line, sizeof(line), "Code: %s", current_lobby.access_code);
+            draw_text(renderer, font, line, sidebar_x, y, COLOR_TEXT_MUTED);
+            y += LINE_HEIGHT;
+        }
+    } else {
+        draw_text(renderer, font, "No room info", sidebar_x, y, COLOR_TEXT_MUTED);
+        y += LINE_HEIGHT;
+    }
+    y += SECTION_GAP;
+
+    draw_divider(renderer, sidebar_x, y, sidebar_w - SIDEBAR_PADDING);
+    y += LINE_GAP;
+
+    draw_text(renderer, font, "Match", sidebar_x, y, COLOR_TEXT_ACCENT);
+    y += LINE_HEIGHT;
+    {
+        int alive = 0;
+        for (int i = 0; i < current_state.num_players; i++) {
+            if (current_state.players[i].is_alive) alive++;
+        }
+        char info[128];
+        snprintf(info, sizeof(info), "Time: %02d:%02d", elapsed_seconds / 60, elapsed_seconds % 60);
+        draw_text(renderer, font, info, sidebar_x, y, COLOR_TEXT_MUTED);
+        y += LINE_HEIGHT + LINE_GAP;
+        snprintf(info, sizeof(info), "Alive: %d/%d", alive, current_state.num_players);
+        draw_text(renderer, font, info, sidebar_x, y,
+                  alive > 1 ? COLOR_TEXT_OK : COLOR_TEXT_BAD);
+        y += LINE_HEIGHT;
+    }
+    y += SECTION_GAP;
+
+    draw_divider(renderer, sidebar_x, y, sidebar_w - SIDEBAR_PADDING);
+    y += LINE_GAP;
+
+    draw_text(renderer, font, "Players", sidebar_x, y, COLOR_TEXT_ACCENT);
+    y += LINE_HEIGHT;
+    for (int i = 0; i < current_state.num_players; i++) {
+        Player *p = &current_state.players[i];
+        SDL_Color c = p->is_alive ? player_colors[i % 4] : COLOR_TEXT_MUTED;
+        SDL_Rect swatch = {sidebar_x, y + 5, 10, 10};
+        SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, c.a);
+        SDL_RenderFillRect(renderer, &swatch);
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        SDL_RenderDrawRect(renderer, &swatch);
+
+        {
+            char line[120];
+            snprintf(line, sizeof(line), " %s", p->username);
+            draw_text(renderer, font, line, sidebar_x + 14, y, c);
+        }
+
+        {
+            const char *status = p->is_alive ? "A" : "X";
+            SDL_Color status_color = p->is_alive ? COLOR_TEXT_OK : COLOR_TEXT_BAD;
+            int status_x = sidebar_x + sidebar_w - 20;
+            draw_text(renderer, font, status, status_x, y, status_color);
+        }
+        y += LINE_HEIGHT;
     }
 }
 
@@ -682,7 +837,33 @@ void render_game(SDL_Renderer *renderer, TTF_Font *font, int tick, int my_player
     }
 
     draw_status_bar(renderer, font, my_player_id);
+
+    // Leave button
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, 200, 50, 50, 220);
+    SDL_RenderFillRect(renderer, &game_leave_btn);
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    SDL_RenderDrawRect(renderer, &game_leave_btn);
+    if (font) {
+        SDL_Surface *surf = TTF_RenderText_Blended(font, "Leave Match", (SDL_Color){255, 255, 255, 255});
+        if (surf) {
+            SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, surf);
+            SDL_Rect rect = {
+                game_leave_btn.x + (game_leave_btn.w - surf->w) / 2,
+                game_leave_btn.y + (game_leave_btn.h - surf->h) / 2,
+                surf->w,
+                surf->h
+            };
+            SDL_RenderCopy(renderer, tex, NULL, &rect);
+            SDL_DestroyTexture(tex);
+            SDL_FreeSurface(surf);
+        }
+    }
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+
     draw_notifications(renderer, font);
+
+    draw_sidebar(renderer, font, my_player_id, elapsed_seconds);
     //SDL_RenderPresent(renderer);
 }
 
