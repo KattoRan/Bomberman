@@ -19,6 +19,8 @@ typedef struct {
     int is_authenticated;
     int lobby_id;
     int player_id_in_game; 
+    char session_token[64];
+    time_t last_active;
 } ClientInfo;
 
 ClientInfo clients[MAX_CLIENTS * MAX_LOBBIES];
@@ -164,6 +166,18 @@ void forfeit_player_from_game(int lobby_id, const char *username) {
     broadcast_game_state(lobby_id);
 }
 
+// Generate a random session token
+void generate_session_token(char *buffer, size_t length) {
+    const char charset[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    if (length > 0) {
+        for (size_t i = 0; i < length - 1; i++) {
+            int key = rand() % (int)(sizeof(charset) - 1);
+            buffer[i] = charset[key];
+        }
+        buffer[length - 1] = '\0';
+    }
+}
+
 // --- Packet Handling ---
 
 void handle_client_packet(int socket_fd, ClientPacket *pkt) {
@@ -241,6 +255,15 @@ void handle_client_packet(int socket_fd, ClientPacket *pkt) {
                         strncpy(response.payload.auth.username, user.username, MAX_USERNAME - 1);
                         strncpy(response.payload.auth.display_name, user.display_name, MAX_DISPLAY_NAME - 1);
                         response.payload.auth.elo_rating = user.elo_rating;
+                        
+                        // Generate and store session token
+                        char token[64];
+                        generate_session_token(token, 64);
+                        if (db_update_session_token(user.id, token) == 0) {
+                            strncpy(response.payload.auth.session_token, token, 63);
+                            strncpy(client->session_token, token, 63);
+                        }
+
                         strcpy(response.message, "Registration successful - welcome!");
                         
                         printf("[AUTH] Registration + Auto-login: %s (ID: %d, ELO: %d)\n", 
@@ -281,6 +304,15 @@ void handle_client_packet(int socket_fd, ClientPacket *pkt) {
                     strncpy(response.payload.auth.username, user.username, MAX_USERNAME - 1);
                     strncpy(response.payload.auth.display_name, user.display_name, MAX_DISPLAY_NAME - 1);
                     response.payload.auth.elo_rating = user.elo_rating;
+                    
+                    // Generate and store session token
+                    char token[64];
+                    generate_session_token(token, 64);
+                    if (db_update_session_token(user.id, token) == 0) {
+                        strncpy(response.payload.auth.session_token, token, 63);
+                        strncpy(client->session_token, token, 63);
+                    }
+                    
                     strcpy(response.message, "Login successful");
                     
                     printf("[AUTH] Login: %s (ID: %d, ELO: %d)\n", 
@@ -291,6 +323,72 @@ void handle_client_packet(int socket_fd, ClientPacket *pkt) {
                 send_response(socket_fd, &response);
             }
             break;
+            
+        case MSG_LOGIN_WITH_TOKEN:
+            {
+                User user;
+                response.type = MSG_AUTH_RESPONSE;
+                // Try to login with token
+                if (db_get_user_by_token(pkt->session_token, &user) == 0) {
+                    response.code = AUTH_SUCCESS;
+                    
+                    client->user_id = user.id;
+                    strncpy(client->username, user.username, MAX_USERNAME - 1);
+                    strncpy(client->display_name, user.display_name, MAX_DISPLAY_NAME - 1);
+                    client->is_authenticated = 1;
+                    strncpy(client->session_token, user.session_token, 63);
+                    
+                    // Send back user info
+                    response.payload.auth.user_id = user.id;
+                    strncpy(response.payload.auth.username, user.username, MAX_USERNAME - 1);
+                    strncpy(response.payload.auth.display_name, user.display_name, MAX_DISPLAY_NAME - 1);
+                    response.payload.auth.elo_rating = user.elo_rating;
+                    strncpy(response.payload.auth.session_token, user.session_token, 63);
+                    strcpy(response.message, "Auto-login successful");
+                    
+                    printf("[AUTH] Auto-Login: %s (ID: %d)\n", user.username, user.id);
+                    
+                    // SMART REJOIN: Check if user is already in an active game
+                    for (int i = 0; i < MAX_LOBBIES; i++) {
+                         Lobby *lb = find_lobby(i);
+                         if (lb && lb->status == LOBBY_PLAYING) {
+                             GameState *gs = &active_games[i];
+                             for(int p=0; p < gs->num_players; p++) {
+                                 if (strcmp(gs->players[p].username, user.username) == 0) {
+                                     // Found active game! Reconnect logic
+                                     printf("[RECONNECT] User %s found in active lobby %d\n", user.username, i);
+                                     
+                                     client->lobby_id = i;
+                                     client->player_id_in_game = p;
+                                     
+                                     // Send Lobby Update first to set context
+                                     ServerPacket lobby_pkt;
+                                     lobby_pkt.type = MSG_LOBBY_UPDATE; 
+                                     lobby_pkt.code = 0;
+                                     lobby_pkt.payload.lobby = *lb;
+                                     send_response(client->socket_fd, &lobby_pkt);
+                                     
+                                     // Then Game State will be sent naturally by broadcast_game_state or next tick
+                                     // But let's send immediately to be sure
+                                     broadcast_game_state(i);
+                                     break;
+                                 }
+                             }
+                         }
+                    }
+                } else {
+                    response.code = AUTH_FAIL;
+                    strcpy(response.message, "Session expired or invalid");
+                }
+                send_response(socket_fd, &response);
+            }
+            break;
+            
+        case MSG_RECONNECT:
+            // Explicit reconnect request (usually used if socket drops mid-game)
+            // Logic similar to Login with Token but might be stricter about existing session
+            break;
+
         case MSG_CREATE_LOBBY:
             if (!client->is_authenticated) break;
             int lid = create_lobby(pkt->room_name, client->username, pkt->is_private, pkt->access_code, pkt->game_mode);
@@ -740,15 +838,32 @@ int main() {
                     printf("[DISCONNECT] Client %d (%s)\n", sd, 
                            clients[i].username[0] ? clients[i].username : "unknown");
 
-                    if (clients[i].lobby_id != -1) {
-                         // If leaving during a game, mark forfeit
-                         forfeit_player_from_game(clients[i].lobby_id, clients[i].username);
+                    // CHECK: Is this user in an active game?
+                    int handled = 0;
+                    if (clients[i].lobby_id != -1 && clients[i].is_authenticated) {
+                        Lobby *lb = find_lobby(clients[i].lobby_id);
+                        if (lb && lb->status == LOBBY_PLAYING) {
+                            // DO NOT FORFEIT YET! Just close the socket.
+                            // The player object in GameState remains "alive" but un-controlled.
+                            // Ideally, mark them as "DISCONNECTED" in GameState struct if you have a flag, 
+                            // or just let them stand still.
+                            printf("[SESSION] User %s preserved in lobby %d for reconnect.\n", clients[i].username, clients[i].lobby_id);
+                            
+                            // Remove ClientInfo from active socket list, BUT we rely on Database/GameState 
+                            // to persist the "Player". 
+                            // Issue: `clients[]` array is the only link between socket and game.
+                            // If we remove `clients[i]`, we lose the map socket -> player.
+                            // New Logic: When RECONNECT comes in, we scan Active Games to find the player.
+                            handled = 1; 
+                        }
+                    }
+
+                    if (!handled && clients[i].lobby_id != -1) {
+                         // Normal leave (not in game, or game waiting)
                          leave_lobby(clients[i].lobby_id, clients[i].username);
                          broadcast_lobby_update(clients[i].lobby_id);
                          broadcast_lobby_list();
                     }
-                    // No longer using logout_user() since it doesn't exist
-                    // Database tracks online status differently now
                     
                     
                     close(sd);
@@ -865,6 +980,7 @@ int main() {
                             }
                             
                             lb->status = LOBBY_WAITING;
+                            broadcast_lobby_update(i);
                         }
                     }
                     

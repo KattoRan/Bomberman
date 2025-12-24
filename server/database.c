@@ -400,3 +400,68 @@ int db_update_elo(int user_id, int new_elo) {
     
     return (rc == SQLITE_DONE) ? 0 : -1;
 }
+
+// Update session token for user
+int db_update_session_token(int user_id, const char *token) {
+    sqlite3_stmt *stmt;
+    // Set token and expiry (30 days from now)
+    const char *sql = "UPDATE Users SET session_token = ?, session_expiry = datetime('now', '+30 days') WHERE id = ?";
+    
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        printf("[DB] Prepare failed: %s\n", sqlite3_errmsg(db));
+        return -1;
+    }
+    
+    sqlite3_bind_text(stmt, 1, token, -1, SQLITE_STATIC);
+    sqlite3_bind_int(stmt, 2, user_id);
+    
+    int rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    
+    if (rc == SQLITE_DONE) {
+        // printf("[DB] Updated session token for user %d\n", user_id);
+        return 0;
+    }
+    return -1;
+}
+
+// Get user by session token (Auto-Login)
+int db_get_user_by_token(const char *token, User *out_user) {
+    sqlite3_stmt *stmt;
+    // Check token and expiry
+    const char *sql = 
+        "SELECT id, username, display_name, email, elo_rating "
+        "FROM Users WHERE session_token = ? AND session_expiry > datetime('now')";
+    
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        return -1;
+    }
+    
+    sqlite3_bind_text(stmt, 1, token, -1, SQLITE_STATIC);
+    
+    int rc = sqlite3_step(stmt);
+    
+    if (rc != SQLITE_ROW) {
+        sqlite3_finalize(stmt);
+        return -1; // Token invalid or expired
+    }
+    
+    if (out_user) {
+        out_user->id = sqlite3_column_int(stmt, 0);
+        strncpy(out_user->username, (const char *)sqlite3_column_text(stmt, 1), MAX_USERNAME - 1);
+        strncpy(out_user->display_name, (const char *)sqlite3_column_text(stmt, 2), MAX_DISPLAY_NAME - 1);
+        strncpy(out_user->email, (const char *)sqlite3_column_text(stmt, 3), MAX_EMAIL - 1);
+        out_user->elo_rating = sqlite3_column_int(stmt, 4);
+        out_user->is_online = 1;
+        out_user->lobby_id = -1;
+        strncpy(out_user->session_token, token, 63);
+    }
+    
+    sqlite3_finalize(stmt);
+    
+    // Refresh expiry
+    db_update_session_token(out_user->id, token);
+    
+    printf("[DB] Auto-login successful: %s via token\n", out_user->username);
+    return 0;
+}
