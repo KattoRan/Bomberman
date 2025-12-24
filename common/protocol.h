@@ -55,10 +55,11 @@
 #define MSG_KICK_PLAYER 21
 #define MSG_SET_ROOM_PRIVATE 22
 #define MSG_LEAVE_GAME 23   // Forfeit while in-game
-#define MSG_LEAVE_GAME 23   // Forfeit while in-game
 #define MSG_CHAT 29         // Chat message
-#define MSG_SPECTATE 30     // Request to spectate
 
+#define MSG_RECONNECT 30
+#define MSG_LOGIN_WITH_TOKEN 31
+#define MSG_SPECTATE 32     // Request to spectate
 
 // Message types - Server to Client
 #define MSG_AUTH_RESPONSE 20
@@ -184,6 +185,7 @@ typedef struct {
     int shrink_zone_right;       // Safe zone right boundary
     int shrink_zone_top;         // Safe zone top boundary
     int shrink_zone_bottom;      // Safe zone bottom boundary
+    long long start_game_time;   // Server timestamp when game started
 } GameState;
 
 // Client packet - ENHANCED
@@ -207,6 +209,7 @@ typedef struct {
     int target_player_id;              // For kick, spectator view
     int game_mode;                     // For room creation: game mode selection
     char chat_message[200];            // For chat messages
+    char session_token[64];            // For reconnection and auto-login
 } ClientPacket;
 
 // Server packet - ENHANCED
@@ -220,6 +223,7 @@ typedef struct {
             char username[MAX_USERNAME];
             char display_name[MAX_DISPLAY_NAME];
             int elo_rating;
+            char session_token[64];
         } auth;
         struct {
             Lobby lobbies[MAX_LOBBIES];
