@@ -143,6 +143,18 @@ typedef struct {
     int is_current_user;  // 1 if this is the current user's message
 } ChatMessage;
 
+// --- Invite System State ---
+IncomingInvite current_invite = {0};
+int show_invite_overlay = 0;
+int invited_user_ids[50];
+int invited_count = 0;
+
+// Buttons for Invite System
+Button btn_open_invite = {{910, 15, 180, 50}, "Invite Friend", 0, BTN_PRIMARY};
+Button btn_close_invite = {{0, 0, 40, 40}, "X", 0, BTN_DANGER}; // Positioned dynamically
+Button btn_invite_accept = {{0, 0, 150, 50}, "Accept", 0, BTN_PRIMARY};
+Button btn_invite_decline = {{0, 0, 150, 50}, "Decline", 0, BTN_DANGER};
+
 ChatMessage chat_history[MAX_CHAT_MESSAGES];
 int chat_count = 0;
 int chat_panel_open = 0;  // Toggle for gameplay (0=mini, 1=full)
@@ -483,6 +495,23 @@ void process_server_packet(ServerPacket *pkt) {
             printf("[CLIENT] Chat - %s: %s\n", pkt->payload.chat_msg.sender_username, pkt->payload.chat_msg.message);
             break;
         }
+
+        case MSG_INVITE_RECEIVED:
+            {
+                current_invite.lobby_id = pkt->payload.invite.lobby_id;
+                strncpy(current_invite.room_name, pkt->payload.invite.room_name, 63);
+                strncpy(current_invite.host_name, pkt->payload.invite.host_name, 31);
+                strncpy(current_invite.access_code, pkt->payload.invite.access_code, 7);
+                current_invite.game_mode = pkt->payload.invite.game_mode;
+                current_invite.is_active = 1;
+
+                snprintf(notification_message, sizeof(notification_message), 
+                        "Game Invite from %s!", current_invite.host_name);
+                notification_time = SDL_GetTicks();
+                printf("[CLIENT] Received invite to Lobby %d from %s (Code: %s)\n", 
+                       current_invite.lobby_id, current_invite.host_name, current_invite.access_code);
+            }
+            break;
     }
 }
 
@@ -497,7 +526,7 @@ int main(int argc, char *argv[]) {
     struct sockaddr_in serv_addr;
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_port = htons(PORT);
-    inet_pton(AF_INET, "172.20.10.2", &serv_addr.sin_addr);
+    inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
     
     if (connect(sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
         printf("Cannot connect to server\n");
@@ -559,6 +588,50 @@ int main(int argc, char *argv[]) {
         // --- Event Handling ---
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_QUIT) running = 0;
+
+            if (current_invite.is_active && e.type == SDL_MOUSEBUTTONDOWN) {
+                // Global Invite Handler - Priority 1
+                // Calculate expected button positions dynamically
+                int win_w, win_h;
+                SDL_GetRendererOutputSize(rend, &win_w, &win_h);
+                int box_w = 400;
+                int box_h = 250;
+                int box_x = (win_w - box_w) / 2;
+                int box_y = (win_h - box_h) / 2;
+
+                btn_invite_accept.rect.x = box_x + 40;
+                btn_invite_accept.rect.y = box_y + 180;
+                btn_invite_decline.rect.x = box_x + 210;
+                btn_invite_decline.rect.y = box_y + 180;
+
+                printf("[DEBUG] Click at %d,%d. Accept Rect: %d,%d %dx%d. Decline Rect: %d,%d %dx%d\n",
+                       mx, my, 
+                       btn_invite_accept.rect.x, btn_invite_accept.rect.y, btn_invite_accept.rect.w, btn_invite_accept.rect.h,
+                       btn_invite_decline.rect.x, btn_invite_decline.rect.y, btn_invite_decline.rect.w, btn_invite_decline.rect.h);
+
+                if (is_mouse_inside(btn_invite_accept.rect, mx, my)) {
+                    printf("[DEBUG] Accepted!\n");
+                    if (my_player_id != -1) {
+                        send_packet(MSG_LEAVE_LOBBY, 0);
+                    }
+                    
+                    ClientPacket pkt;
+                    memset(&pkt, 0, sizeof(pkt));
+                    pkt.type = MSG_JOIN_LOBBY;
+                    pkt.lobby_id = current_invite.lobby_id;
+                    strncpy(pkt.access_code, current_invite.access_code, 7);
+                    send(sock, &pkt, sizeof(pkt), 0);
+                    
+                    current_invite.is_active = 0;
+                    show_invite_overlay = 0;
+                }
+                else if (is_mouse_inside(btn_invite_decline.rect, mx, my)) {
+                    printf("[DEBUG] Declined!\n");
+                    current_invite.is_active = 0;
+                }
+                // Consume the event!
+                continue;
+            }
 
             switch (current_screen) {
                 case SCREEN_LOGIN:
@@ -897,6 +970,74 @@ int main(int argc, char *argv[]) {
                     
                 case SCREEN_LOBBY_ROOM:
                     if (e.type == SDL_MOUSEBUTTONDOWN) {
+                        // LAYER 2: Invite Friends Overlay
+                        if (show_invite_overlay) {
+                            if (is_mouse_inside(btn_close_invite.rect, mx, my)) {
+                                show_invite_overlay = 0;
+                            }
+                            
+                            // Check clicks on friend list "Invite" buttons
+                            // Calculated same way as render_invite_overlay
+                            int win_w, win_h;
+                            SDL_GetRendererOutputSize(rend, &win_w, &win_h);
+                            int overlay_w = 500, overlay_h = 500;
+                            int overlay_x = (win_w - overlay_w) / 2;
+                            int overlay_y = 110;
+                            int list_y = overlay_y + 80;
+                            int btn_w = 100, btn_h = 40;
+                            
+                            // Iterate only online friends
+                            int displayed_count = 0;
+                            for (int i = 0; i < friends_count; i++) {
+                                if (friends_list[i].is_online) {
+                                    if (displayed_count < 6) { // Page limit
+                                        SDL_Rect invite_btn = {
+                                            overlay_x + overlay_w - btn_w - 40,
+                                            list_y + (displayed_count * 60) + 10,
+                                            btn_w, btn_h
+                                        };
+                                        
+                                        if (is_mouse_inside(invite_btn, mx, my)) {
+                                            // Check if already invited
+                                            int already_invited = 0;
+                                            for(int k=0; k<invited_count; k++) {
+                                                if(invited_user_ids[k] == friends_list[i].user_id) already_invited = 1;
+                                            }
+                                            
+                                            if (!already_invited) {
+                                                // Send Invite
+                                                ClientPacket pkt;
+                                                memset(&pkt, 0, sizeof(pkt));
+                                                pkt.type = MSG_FRIEND_INVITE;
+                                                strncpy(pkt.target_display_name, friends_list[i].display_name, MAX_DISPLAY_NAME-1);
+                                                send(sock, &pkt, sizeof(pkt), 0);
+                                                
+                                                // Track invited user locally
+                                                if(invited_count < 50) {
+                                                    invited_user_ids[invited_count++] = friends_list[i].user_id;
+                                                }
+                                            }
+                                        }
+                                        displayed_count++;
+                                    }
+                                }
+                            }
+                            
+                            // BLOCK underlying lobby inputs
+                            break;
+                        }
+
+                        // LAYER 3: Normal Lobby Room Controls
+                        // Invite Button
+                        if (current_lobby.num_players < 4) {
+                             if (is_mouse_inside(btn_open_invite.rect, mx, my)) {
+                                show_invite_overlay = 1;
+                                invited_count = 0; // Reset session tracking
+                                send_packet(MSG_FRIEND_LIST, 0); // Refresh friends
+                                break;
+                             }
+                        }
+
                         // Check Start/Ready buttons FIRST (highest priority)
                         if (my_player_id == current_lobby.host_id) {
                             if (is_mouse_inside(btn_start.rect, mx, my)) {
@@ -924,15 +1065,7 @@ int main(int argc, char *argv[]) {
                             send_packet(MSG_LIST_LOBBIES, 0);
                             lobby_error_message[0] = '\0';
                         }
-                        // Lock Room button (host only)
-                        else if (my_player_id == current_lobby.host_id && 
-                                is_mouse_inside((SDL_Rect){803, 15, 180, 50}, mx, my)) {
-                            // Toggle lock - show notification (backend not implemented)
-                            snprintf(notification_message, sizeof(notification_message),
-                                    "Room locking coming soon!");
-                            notification_time = SDL_GetTicks();
-                        }
-                        // Chat button - removed (chat is always visible now)
+                        // Leave button
                         
                         // Chat input field click (activate for typing)
                         if (is_mouse_inside((SDL_Rect){610, 632, 340, 38}, mx, my)) {
@@ -1344,6 +1477,8 @@ int main(int argc, char *argv[]) {
             lobby_error_message[0] = '\0';
         }
         
+
+        
         switch (current_screen) {
             case SCREEN_LOGIN: {
                 btn_login.is_hovered = is_mouse_inside(btn_login.rect, mx, my);
@@ -1455,6 +1590,17 @@ int main(int argc, char *argv[]) {
                 
                 // Render chat panel
                 render_chat_panel_room(rend, font_small, chat_history, &inp_chat_message, chat_count);
+                
+                // Invite button
+                if (current_lobby.num_players < 4) {
+                    btn_open_invite.is_hovered = is_mouse_inside(btn_open_invite.rect, mx, my);
+                    draw_button(rend, font_small, &btn_open_invite);
+                }
+                
+                if (show_invite_overlay) {
+                    render_invite_overlay(rend, font_small, friends_list, friends_count, 
+                                         invited_user_ids, invited_count, &btn_close_invite);
+                }
                 break;
             }
 
@@ -1645,6 +1791,14 @@ int main(int argc, char *argv[]) {
             }
         } else if (SDL_GetTicks() - notification_time >= NOTIFICATION_DURATION) {
             notification_message[0] = '\0'; // Clear after duration
+        }
+
+        // Global Invite Popup
+        if (current_invite.is_active) {
+            // Check button hovers
+            btn_invite_accept.is_hovered = is_mouse_inside(btn_invite_accept.rect, mx, my);
+            btn_invite_decline.is_hovered = is_mouse_inside(btn_invite_decline.rect, mx, my);
+            render_invitation_popup(rend, font_small, &current_invite, &btn_invite_accept, &btn_invite_decline);
         }
 
         SDL_RenderPresent(rend); // ~60 FPS

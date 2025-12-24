@@ -30,48 +30,44 @@
 #define POWERUP_BOMB 5      // Tăng số bom
 #define POWERUP_FIRE 6      // Tăng tầm nổ
 #define POWERUP_SPEED 7     // Tăng tốc độ (dự phòng)
-
-// Message types - Client to Server
-#define MSG_REGISTER 1
-#define MSG_LOGIN 2
-#define MSG_CREATE_LOBBY 3
-#define MSG_JOIN_LOBBY 4
-#define MSG_LEAVE_LOBBY 5
-#define MSG_LIST_LOBBIES 6
-#define MSG_READY 7
-#define MSG_START_GAME 8
-#define MSG_MOVE 10
-#define MSG_PLANT_BOMB 11
-#define MSG_FRIEND_REQUEST 12
-#define MSG_FRIEND_ACCEPT 13
-#define MSG_FRIEND_DECLINE 14
-#define MSG_FRIEND_REMOVE 15
-#define MSG_FRIEND_RESPONSE 16
-#define MSG_FRIEND_LIST 17
-#define MSG_GET_PROFILE 18
-#define MSG_UPDATE_PROFILE 19
-#define MSG_GET_LEADERBOARD 20
-#define MSG_KICK_PLAYER 21
-#define MSG_SET_ROOM_PRIVATE 22
-#define MSG_LEAVE_GAME 23   // Forfeit while in-game
-#define MSG_CHAT 29         // Chat message
-
-// Message types - Server to Client
-#define MSG_AUTH_RESPONSE 20
-#define MSG_LOBBY_LIST 21
-#define MSG_LOBBY_UPDATE 22
-#define MSG_GAME_STATE 23
-#define MSG_ERROR 24
-#define MSG_FRIEND_LIST_RESPONSE 25
-#define MSG_PROFILE_RESPONSE 26
-#define MSG_LEADERBOARD_RESPONSE 27
-#define MSG_NOTIFICATION 28
-
-// Movement
 #define MOVE_UP 0
 #define MOVE_DOWN 1
 #define MOVE_LEFT 2
 #define MOVE_RIGHT 3
+
+// Message types
+#define MSG_REGISTER 1
+#define MSG_LOGIN 2
+#define MSG_CREATE_LOBBY 3
+#define MSG_JOIN_LOBBY 4
+#define MSG_LIST_LOBBIES 5
+#define MSG_LEAVE_LOBBY 6
+#define MSG_START_GAME 7
+#define MSG_GAME_STATE 8
+#define MSG_MOVE 9
+#define MSG_PLANT_BOMB 10
+#define MSG_LEAVE_GAME 11
+#define MSG_FRIEND_REQUEST 12
+#define MSG_FRIEND_ACCEPT 13
+#define MSG_FRIEND_DECLINE 14
+#define MSG_FRIEND_REMOVE 15
+#define MSG_FRIEND_LIST 16
+#define MSG_FRIEND_LIST_RESPONSE 17
+#define MSG_FRIEND_RESPONSE 18
+#define MSG_LOBBY_UPDATE 19
+#define MSG_LOBBY_LIST 20
+#define MSG_READY 21
+#define MSG_CHAT 22
+#define MSG_GET_PROFILE 23
+#define MSG_PROFILE_RESPONSE 24
+#define MSG_GET_LEADERBOARD 25
+#define MSG_LEADERBOARD_RESPONSE 26
+#define MSG_NOTIFICATION 27
+#define MSG_ERROR 28
+#define MSG_FRIEND_INVITE 30
+#define MSG_INVITE_RECEIVED 31
+#define MSG_INVITE_RESPONSE 32
+#define MSG_AUTH_RESPONSE 33
 
 // Lobby status
 #define LOBBY_WAITING 0
@@ -236,6 +232,13 @@ typedef struct {
             uint32_t timestamp;
             int player_id;  // For color coding
         } chat_msg;
+        struct {
+            int lobby_id;
+            char room_name[MAX_ROOM_NAME];
+            char host_name[MAX_USERNAME];
+            char access_code[8];  // For password bypass
+            int game_mode;
+        } invite;
     } payload;
 } ServerPacket;
 

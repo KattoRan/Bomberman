@@ -95,4 +95,24 @@ void render_chat_panel_room(SDL_Renderer *renderer, TTF_Font *font,
                             void *chat_messages, void *input_field,
                             int chat_count);
 
+
+// Invite system structures
+typedef struct {
+    int lobby_id;
+    char room_name[64];
+    char host_name[32];
+    char access_code[8];
+    int game_mode;
+    int is_active;
+} IncomingInvite;
+
+void render_invite_overlay(SDL_Renderer *renderer, TTF_Font *font, 
+                          FriendInfo *online_friends, int friend_count, 
+                          int *invited_user_ids, int invited_count,
+                          Button *close_btn);
+
+void render_invitation_popup(SDL_Renderer *renderer, TTF_Font *font,
+                            IncomingInvite *invite,
+                            Button *accept_btn, Button *decline_btn);
+
 #endif

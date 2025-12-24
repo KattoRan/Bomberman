@@ -453,7 +453,49 @@ void handle_client_packet(int socket_fd, ClientPacket *pkt) {
             send_response(socket_fd, &response);
             break;
         }    
-        
+
+        case MSG_FRIEND_INVITE: 
+        {
+            if (!client->is_authenticated || client->lobby_id < 0) {
+                break;
+            }
+            
+            int target_socket = -1;
+            for (int i = 0; i < num_clients; i++) {
+                if (clients[i].is_authenticated && 
+                    strcmp(clients[i].display_name, pkt->target_display_name) == 0) {
+                    target_socket = clients[i].socket_fd;
+                    break;
+                }
+            }
+            
+            if (target_socket != -1) {
+                Lobby *lobby = find_lobby(client->lobby_id);
+                if (lobby) {
+                    ServerPacket invite_pkt;
+                    memset(&invite_pkt, 0, sizeof(ServerPacket));
+                    invite_pkt.type = MSG_INVITE_RECEIVED;
+                    invite_pkt.payload.invite.lobby_id = lobby->id;
+                    strncpy(invite_pkt.payload.invite.room_name, lobby->name, MAX_ROOM_NAME - 1);
+                    strncpy(invite_pkt.payload.invite.host_name, lobby->host_username, MAX_USERNAME - 1);
+                    strncpy(invite_pkt.payload.invite.access_code, lobby->access_code, 7); 
+                    invite_pkt.payload.invite.game_mode = lobby->game_mode;
+                    
+                    send_response(target_socket, &invite_pkt);
+                    
+                    response.type = MSG_NOTIFICATION;
+                    snprintf(response.message, sizeof(response.message), "Invitation sent to %s", pkt->target_display_name);
+                    send_response(socket_fd, &response);
+                    printf("[INVITE] %s invited %s to Room %d\n", client->username, pkt->target_display_name, lobby->id);
+                }
+            } else {
+                response.type = MSG_NOTIFICATION;
+                snprintf(response.message, sizeof(response.message), "User %s not found or offline", pkt->target_display_name);
+                send_response(socket_fd, &response);
+            }
+            break;
+        }
+
         case MSG_FRIEND_ACCEPT:
             if (!client->is_authenticated) break;
             {
