@@ -15,6 +15,7 @@ typedef struct {
     char display_name[MAX_DISPLAY_NAME];     // Mutable display name
     char email[MAX_EMAIL];                   // For login and verification
     int elo_rating;                          // ELO ranking
+    char session_token[64];                  // Session token
     int is_online;                           // Current online status
     int lobby_id;                            // Current lobby (-1 if none)
 } User;
@@ -28,6 +29,8 @@ int db_update_display_name(int user_id, const char *new_display_name);
 int db_get_user_by_id(int user_id, User *out_user);
 int db_find_user_by_display_name(const char *display_name, User *out_user);
 int db_update_elo(int user_id, int new_elo);
+int db_update_session_token(int user_id, const char *token);
+int db_get_user_by_token(const char *token, User *out_user);
 
 // --- Lobby Functions ---
 void init_lobbies();
@@ -40,6 +43,8 @@ int start_game(int lobby_id, const char *username);
 int get_lobby_list(Lobby *out_lobbies);
 Lobby* find_lobby(int lobby_id);
 int find_user_lobby(const char *username);
+int join_spectator(int lobby_id, const char *username);
+int leave_spectator(int lobby_id, const char *username);
 
 // --- Game Logic Functions ---
 void init_game(GameState *state, Lobby *lobby);

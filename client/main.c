@@ -128,7 +128,9 @@ int post_match_kills[4] = {0, 0, 0, 0};
 int post_match_duration = 0;  // Match duration in seconds
 int post_match_shown = 0;  // Prevent showing multiple times
 Button btn_rematch       = {{360, 800, 250, 60}, "Rematch", 0};
-Button btn_return_lobby  = {{610, 800, 250, 60}, "Return", 0};
+Button btn_return_lobby  = {{610, 800, 250, 60}, "Back to Room", 0};
+
+Button btn_logout        = {{40, 45, 120, 50}, "Logout", BTN_DANGER}; // Top left
 
 // Game timer tracking
 Uint32 game_start_time = 0;  // SDL ticks when game started
@@ -147,6 +149,76 @@ ChatMessage chat_history[MAX_CHAT_MESSAGES];
 int chat_count = 0;
 int chat_panel_open = 0;  // Toggle for gameplay (0=mini, 1=full)
 InputField inp_chat_message = {{0, 0, 600, 40}, "", "", 0, 199};  // Max 199 chars + null
+
+// --- Session Persistence ---
+char session_file_path[256];
+
+void determine_session_path(int argc, char *argv[]) {
+    // Priority 1: --profile <name>
+    for (int i = 1; i < argc - 1; i++) {
+        if (strcmp(argv[i], "--profile") == 0) {
+            const char *home = getenv("HOME");
+            if (!home) home = ".";
+            snprintf(session_file_path, sizeof(session_file_path), "%s/.bomberman_session_%s", home, argv[i+1]);
+            printf("[SESSION] Using profile path: %s\n", session_file_path);
+            return;
+        }
+    }
+
+    // Priority 2: TTY-based path (Automatic isolation)
+    char *tty = ttyname(STDIN_FILENO);
+    if (tty) {
+        // Sanitize TTY name (replace / with _)
+        char safe_tty[64];
+        int j = 0;
+        for (int i = 0; tty[i] && j < 63; i++) {
+            if (tty[i] == '/') safe_tty[j++] = '_';
+            else safe_tty[j++] = tty[i];
+        }
+        safe_tty[j] = '\0';
+        
+        const char *home = getenv("HOME");
+        if (!home) home = ".";
+        snprintf(session_file_path, sizeof(session_file_path), "%s/.bomberman_session%s", home, safe_tty);
+        printf("[SESSION] Auto-detected TTY path: %s\n", session_file_path);
+        return;
+    }
+
+    // Priority 3: Fallback default
+    const char *home = getenv("HOME");
+    if (!home) home = ".";
+    snprintf(session_file_path, sizeof(session_file_path), "%s/.bomberman_session_default", home);
+    printf("[SESSION] Using fallback path: %s\n", session_file_path);
+}
+
+void save_session_token(const char *token) {
+    if (token[0] == '\0') return; // Don't save empty tokens
+    FILE *f = fopen(session_file_path, "w");
+    if (f) {
+        fprintf(f, "%s", token);
+        fclose(f);
+        // printf("[SESSION] Token saved.\n");
+    }
+}
+
+int load_session_token(char *buffer) {
+    FILE *f = fopen(session_file_path, "r");
+    if (f) {
+        if (fgets(buffer, 64, f)) {
+            // Remove newline if present
+            buffer[strcspn(buffer, "\n")] = 0;
+            fclose(f);
+            return 1;
+        }
+        fclose(f);
+    }
+    return 0;
+}
+
+void clear_session_token() {
+    unlink(session_file_path);
+    printf("[SESSION] Token cleared.\n");
+}
 
 // --- Helper Functions ---
 
@@ -249,9 +321,17 @@ void process_server_packet(ServerPacket *pkt) {
     switch (pkt->type) {
         case MSG_AUTH_RESPONSE:
             if (pkt->code == AUTH_SUCCESS) {
-                current_screen = SCREEN_LOBBY_LIST;
+                if (current_screen == SCREEN_LOGIN || current_screen == SCREEN_REGISTER) {
+                    current_screen = SCREEN_LOBBY_LIST;
+                }
                 send_packet(MSG_LIST_LOBBIES, 0); 
-                strncpy(my_username, inp_user.text, MAX_USERNAME);
+                
+                // Save session token
+                if (pkt->payload.auth.session_token[0] != '\0') {
+                    save_session_token(pkt->payload.auth.session_token);
+                }
+                
+                strncpy(my_username, pkt->payload.auth.username, MAX_USERNAME); // Use server provided username
                 status_message[0] = '\0';
                 
                 // Show welcome notification
@@ -260,6 +340,19 @@ void process_server_packet(ServerPacket *pkt) {
                 
                 printf("[CLIENT] Authenticated as: %s\n", my_username);
             } else {
+                if (current_screen == SCREEN_LOGIN) { 
+                    // Only show errors if we are actually ON the login screen
+                    // (prevents auto-login failure from showing alert, it just stays on login)
+                    if (pkt->code == AUTH_FAIL && pkt->message[0] == '\0') {
+                         strcpy(status_message, "Session expired");
+                    } else {
+                         strncpy(status_message, pkt->message, sizeof(status_message));
+                    }
+                } else {
+                    // Auto-login failed implicitly -> force to login screen
+                    current_screen = SCREEN_LOGIN; 
+                    clear_session_token();
+                }
                 if (pkt->code == AUTH_USER_EXISTS) {
                     strncpy(status_message,
                             "Email and username are taken. Try another.",
@@ -352,7 +445,7 @@ void process_server_packet(ServerPacket *pkt) {
                 printf("╚═══════════════════════╝\n\n");
                 
                 // Switch to post-match screen (only once)
-                if (current_screen == SCREEN_GAME && !post_match_shown) {
+                if ((current_screen == SCREEN_GAME || current_screen == SCREEN_LOBBY_ROOM) && !post_match_shown) {
                     current_screen = SCREEN_POST_MATCH;
                     post_match_shown = 1;  // Mark as shown
                     
@@ -489,18 +582,30 @@ void process_server_packet(ServerPacket *pkt) {
 // --- Main Client ---
 
 int main(int argc, char *argv[]) {
-    (void)argc;
-    (void)argv;
-
+    // Determine session path
+    determine_session_path(argc, argv);
+    
     // 1. Setup Network
     sock = socket(AF_INET, SOCK_STREAM, 0);
     struct sockaddr_in serv_addr;
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_port = htons(PORT);
-    inet_pton(AF_INET, "172.20.10.2", &serv_addr.sin_addr);
+    
+    // Default to localhost, or use command line argument
+    const char *server_ip = "127.0.0.1";
+    if (argc > 1) {
+        server_ip = argv[1];
+    }
+    
+    if (inet_pton(AF_INET, server_ip, &serv_addr.sin_addr) <= 0) {
+        printf("Invalid address/ Address not supported \n");
+        return -1;
+    }
+    
+    printf("Connecting to %s:%d...\n", server_ip, PORT);
     
     if (connect(sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
-        printf("Cannot connect to server\n");
+        printf("Cannot connect to server at %s:%d\n", server_ip, PORT);
         return -1;
     }
     
@@ -508,6 +613,19 @@ int main(int argc, char *argv[]) {
     fcntl(sock, F_SETFL, flags | O_NONBLOCK);
     
     printf("Connected to server!\n");
+    
+    // Auto-Login Attempt
+    char saved_token[64];
+    if (load_session_token(saved_token)) {
+        printf("[CLIENT] Found saved session token. Attempting auto-login...\n");
+        ClientPacket pkt;
+        memset(&pkt, 0, sizeof(pkt));
+        pkt.type = MSG_LOGIN_WITH_TOKEN;
+        strncpy(pkt.session_token, saved_token, 63);
+        send(sock, &pkt, sizeof(pkt), 0);
+        // Note: We stay on SCREEN_LOGIN until server responds. 
+        // If success -> SCREEN_LOBBY_LIST or SCREEN_GAME (handled in MSG_AUTH_RESPONSE/MSG_GAME_STATE)
+    }
 
     // 2. Setup SDL - FULLSCREEN 1120x720
     SDL_Init(SDL_INIT_VIDEO);
@@ -728,6 +846,20 @@ int main(int argc, char *argv[]) {
                             current_screen = SCREEN_SETTINGS;
                             settings_active_tab = 0;  // Default to Graphics tab
                         }
+                        if (is_mouse_inside(btn_logout.rect, mx, my)) {
+                            // Logout
+                            clear_session_token();
+                            current_screen = SCREEN_LOGIN;
+                            status_message[0] = '\0';
+                            
+                            // Clear login inputs
+                            inp_user.text[0] = '\0';
+                            inp_pass.text[0] = '\0';
+                            
+                            // Close socket or send disconnect? 
+                            // For simplicity, just clearing token and going to login screen.
+                            // Main loop will handle new login.
+                        }
                         
                         // Lobby click detection - MUST MATCH ui_screens.c coordinates
                         int y = 120;  // Fixed from top
@@ -747,12 +879,21 @@ int main(int argc, char *argv[]) {
                                     inp_join_code.is_active = 1;
                                 } else {
                                     // Join public room directly
-                                    ClientPacket pkt;
-                                    memset(&pkt, 0, sizeof(pkt));
-                                    pkt.type = MSG_JOIN_LOBBY;
-                                    pkt.lobby_id = lobby_list[i].id;
-                                    pkt.access_code[0] = '\0';
-                                    send(sock, &pkt, sizeof(pkt), 0);
+                                    // Join public room or Spectate
+                                    if (lobby_list[i].status == LOBBY_PLAYING) {
+                                        ClientPacket pkt;
+                                        memset(&pkt, 0, sizeof(pkt));
+                                        pkt.type = MSG_SPECTATE;
+                                        pkt.lobby_id = lobby_list[i].id;
+                                        send(sock, &pkt, sizeof(pkt), 0);
+                                    } else {
+                                        ClientPacket pkt;
+                                        memset(&pkt, 0, sizeof(pkt));
+                                        pkt.type = MSG_JOIN_LOBBY;
+                                        pkt.lobby_id = lobby_list[i].id;
+                                        pkt.access_code[0] = '\0';
+                                        send(sock, &pkt, sizeof(pkt), 0);
+                                    }
                                 }
                                 selected_lobby_idx = i;
                                 break;
@@ -1045,22 +1186,24 @@ int main(int argc, char *argv[]) {
                 
                 case SCREEN_POST_MATCH:
                     if (e.type == SDL_MOUSEBUTTONDOWN) {
-                        // Post-match screen buttons
-                        printf("[CLIENT] Post-match click at (%d, %d)\n", mx, my);
-                        if (is_mouse_inside((SDL_Rect){300, 480, 240, 60}, mx, my)) {
+                        // Post-match screen buttons - USE DYNAMIC RECTS
+                        if (is_mouse_inside(btn_rematch.rect, mx, my)) {
                             // Rematch - return to lobby room for another game
-                            printf("[CLIENT] Rematch button clicked - returning to lobby room\n");
                             current_screen = SCREEN_LOBBY_ROOM;
-                            post_match_shown = 0;  // Reset for next match
-                            // Note: Players are still in the lobby, host can start another game
+                            post_match_shown = 0;
                         }
-                        if (is_mouse_inside((SDL_Rect){580, 480, 240, 60}, mx, my)) {
-                            // Return to lobby list - LEAVE CURRENT LOBBY FIRST
-                            printf("[CLIENT] Return to lobby button clicked - leaving lobby and switching to LOBBY_LIST\n");
-                            send_packet(MSG_LEAVE_LOBBY, 0);  // Leave current lobby
-                            current_screen = SCREEN_LOBBY_LIST;
-                            send_packet(MSG_LIST_LOBBIES, 0);  // Request fresh lobby list
-                            post_match_shown = 0;  // Reset for next match
+                        if (is_mouse_inside(btn_return_lobby.rect, mx, my)) {
+                            if (my_player_id == -1) {
+                                // Spectator: Leave lobby and return to list
+                                send_packet(MSG_LEAVE_LOBBY, 0);
+                                current_screen = SCREEN_LOBBY_LIST;
+                                send_packet(MSG_LIST_LOBBIES, 0);
+                                lobby_error_message[0] = '\0';
+                            } else {
+                                // Player: Back to Room - Stay in lobby (Waiting state)
+                                current_screen = SCREEN_LOBBY_ROOM;
+                            }
+                            post_match_shown = 0;
                         }
                     }
                     break;
@@ -1380,6 +1523,7 @@ int main(int argc, char *argv[]) {
                 btn_settings.is_hovered = is_mouse_inside(btn_settings.rect, mx, my);
                 btn_profile.is_hovered = is_mouse_inside(btn_profile.rect, mx, my);
                 btn_leaderboard.is_hovered = is_mouse_inside(btn_leaderboard.rect, mx, my);
+                btn_logout.is_hovered = is_mouse_inside(btn_logout.rect, mx, my);
                 btn_create_confirm.is_hovered = is_mouse_inside(btn_create_confirm.rect, mx, my);
                 btn_cancel.is_hovered = is_mouse_inside(btn_cancel.rect, mx, my);
 
@@ -1391,6 +1535,9 @@ int main(int argc, char *argv[]) {
                 );
                 
                 // Draw additional nav buttons - MODERNIZED with rounded corners
+                // Logout button (top left)
+                draw_button(rend, font_small, &btn_logout);
+
                 // Friends button
                 draw_button(rend, font_small, &btn_friends);
                 
@@ -1598,7 +1745,7 @@ int main(int argc, char *argv[]) {
                                         post_match_winner_id, post_match_elo_changes,
                                         post_match_kills, post_match_duration,
                                         &btn_rematch, &btn_return_lobby,
-                                        &current_state);
+                                        &current_state, my_player_id);
                 break;
             }
 
