@@ -45,7 +45,9 @@ int create_lobby(const char *room_name, const char *host_username, int is_privat
     lobby->name[MAX_ROOM_NAME - 1] = '\0';
     lobby->num_players = 1;
     lobby->host_id = 0;
+    lobby->host_id = 0;
     lobby->status = LOBBY_WAITING;
+    lobby->spectator_count = 0; // Initialize spectators
     lobby->is_private = is_private;
     lobby->is_locked = 0;
     lobby->game_mode = game_mode;  // Store game mode selection
@@ -209,7 +211,8 @@ int start_game(int lobby_id, const char *username) {
 int get_lobby_list(Lobby *out_lobbies) {
     int count = 0;
     for (int i = 0; i < MAX_LOBBIES; i++) {
-        if (lobbies[i].id != -1 && lobbies[i].status != LOBBY_PLAYING) {
+        // CHANGED: Include LOBBY_PLAYING rooms so spectators can see them
+        if (lobbies[i].id != -1) {
             out_lobbies[count++] = lobbies[i];
         }
     }
@@ -226,4 +229,61 @@ int find_user_lobby(const char *username) {
         }
     }
     return -1;
+}
+
+// Join as spectator
+int join_spectator(int lobby_id, const char *username) {
+    if (lobby_id < 0 || lobby_id >= MAX_LOBBIES || lobbies[lobby_id].id == -1) return ERR_LOBBY_NOT_FOUND;
+    Lobby *lobby = &lobbies[lobby_id];
+    
+    // Check if full
+    if (lobby->spectator_count >= MAX_SPECTATORS) return ERR_LOBBY_FULL;
+    
+    // Check duplications in spectators
+    for (int i = 0; i < lobby->spectator_count; i++) {
+        if (strcmp(lobby->spectators[i], username) == 0) {
+            return ERR_LOBBY_DUPLICATE_USER;
+        }
+    }
+    
+    // Check duplications in players (cannot spectate if playing)
+    for (int i = 0; i < lobby->num_players; i++) {
+        if (strcmp(lobby->players[i].username, username) == 0) {
+            return ERR_LOBBY_DUPLICATE_USER;
+        }
+    }
+    
+    // Add spectator
+    strncpy(lobby->spectators[lobby->spectator_count], username, MAX_USERNAME - 1);
+    lobby->spectators[lobby->spectator_count][MAX_USERNAME - 1] = '\0';
+    lobby->spectator_count++;
+    
+    printf("[LOBBY] %s spectating lobby %d (%d/%d spectators)\n", 
+           username, lobby_id, lobby->spectator_count, MAX_SPECTATORS);
+    return 0;
+}
+
+// Leave spectator mode
+int leave_spectator(int lobby_id, const char *username) {
+    Lobby *lobby = find_lobby(lobby_id);
+    if (!lobby) return ERR_LOBBY_NOT_FOUND;
+    
+    int idx = -1;
+    for (int i = 0; i < lobby->spectator_count; i++) {
+        if (strcmp(lobby->spectators[i], username) == 0) {
+            idx = i;
+            break;
+        }
+    }
+    
+    if (idx == -1) return ERR_LOBBY_NOT_FOUND;
+    
+    // Shift array
+    for (int i = idx; i < lobby->spectator_count - 1; i++) {
+        strncpy(lobby->spectators[i], lobby->spectators[i+1], MAX_USERNAME);
+    }
+    lobby->spectator_count--;
+    
+    printf("[LOBBY] %s stopped spectating lobby %d\n", username, lobby_id);
+    return 0;
 }

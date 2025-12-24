@@ -40,6 +40,8 @@ int start_game(int lobby_id, const char *username);
 int get_lobby_list(Lobby *out_lobbies);
 Lobby* find_lobby(int lobby_id);
 int find_user_lobby(const char *username);
+int join_spectator(int lobby_id, const char *username);
+int leave_spectator(int lobby_id, const char *username);
 
 // --- Game Logic Functions ---
 void init_game(GameState *state, Lobby *lobby);

@@ -7,6 +7,7 @@
 #define MAX_CLIENTS 4
 #define MAX_LOBBIES 10
 #define MAX_USERNAME 32
+#define MAX_SPECTATORS 4
 #define MAX_PASSWORD 128
 #define MAX_ROOM_NAME 64
 #define MAX_EMAIL 128
@@ -54,7 +55,10 @@
 #define MSG_KICK_PLAYER 21
 #define MSG_SET_ROOM_PRIVATE 22
 #define MSG_LEAVE_GAME 23   // Forfeit while in-game
+#define MSG_LEAVE_GAME 23   // Forfeit while in-game
 #define MSG_CHAT 29         // Chat message
+#define MSG_SPECTATE 30     // Request to spectate
+
 
 // Message types - Server to Client
 #define MSG_AUTH_RESPONSE 20
@@ -152,6 +156,8 @@ typedef struct {
     int host_id;
     Player players[MAX_CLIENTS];
     int num_players;
+    int spectator_count;
+    char spectators[MAX_SPECTATORS][MAX_USERNAME];
     int status;                  // LOBBY_WAITING or LOBBY_PLAYING
     int is_private;              // 0 = public, 1 = private
     char access_code[8];         // 6-digit code (plus null terminator)

@@ -306,6 +306,43 @@ void handle_client_packet(int socket_fd, ClientPacket *pkt) {
             }
             break;
 
+        case MSG_SPECTATE:
+            if (!client->is_authenticated) break;
+            {
+                int res = join_spectator(pkt->lobby_id, client->username);
+                if (res == 0) {
+                    client->lobby_id = pkt->lobby_id;
+                    client->player_id_in_game = -1; // Mark as spectator
+                    
+                    Lobby *lb = find_lobby(pkt->lobby_id);
+                    
+                    // Send Lobby Update
+                    response.type = MSG_LOBBY_UPDATE;
+                    response.payload.lobby = *lb;
+                    send_response(socket_fd, &response);
+                    
+                    // If game is running, send initial state
+                    if (lb->status == LOBBY_PLAYING) {
+                         ServerPacket gs_pkt;
+                         memset(&gs_pkt, 0, sizeof(ServerPacket));
+                         gs_pkt.type = MSG_GAME_STATE;
+                         gs_pkt.payload.game_state = active_games[pkt->lobby_id];
+                         send_response(socket_fd, &gs_pkt);
+                    }
+                    
+                    // Notify everyone else
+                    broadcast_lobby_update(pkt->lobby_id);
+                } else {
+                    response.type = MSG_ERROR;
+                    response.code = res;
+                    if (res == ERR_LOBBY_FULL) strcpy(response.message, "Room full (spectators)");
+                    else if (res == ERR_LOBBY_DUPLICATE_USER) strcpy(response.message, "Already joined");
+                    else strcpy(response.message, "Cannot spectate");
+                    send_response(socket_fd, &response);
+                }
+            }
+            break;
+
         case MSG_JOIN_LOBBY:
             if (!client->is_authenticated) break;
             // Use join_lobby_with_code to support private rooms
@@ -723,6 +760,7 @@ int main() {
                 ClientInfo *cl = &clients[num_clients++];
                 cl->socket_fd = new_sock;
                 cl->lobby_id = -1;
+                cl->player_id_in_game = -1;
                 cl->is_authenticated = 0;
                 cl->username[0] = '\0';
                 printf("[CONNECTION] Client %d connected\n", new_sock);

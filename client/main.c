@@ -497,10 +497,22 @@ int main(int argc, char *argv[]) {
     struct sockaddr_in serv_addr;
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_port = htons(PORT);
-    inet_pton(AF_INET, "172.20.10.2", &serv_addr.sin_addr);
+    
+    // Default to localhost, or use command line argument
+    const char *server_ip = "127.0.0.1";
+    if (argc > 1) {
+        server_ip = argv[1];
+    }
+    
+    if (inet_pton(AF_INET, server_ip, &serv_addr.sin_addr) <= 0) {
+        printf("Invalid address/ Address not supported \n");
+        return -1;
+    }
+    
+    printf("Connecting to %s:%d...\n", server_ip, PORT);
     
     if (connect(sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
-        printf("Cannot connect to server\n");
+        printf("Cannot connect to server at %s:%d\n", server_ip, PORT);
         return -1;
     }
     
@@ -747,12 +759,21 @@ int main(int argc, char *argv[]) {
                                     inp_join_code.is_active = 1;
                                 } else {
                                     // Join public room directly
-                                    ClientPacket pkt;
-                                    memset(&pkt, 0, sizeof(pkt));
-                                    pkt.type = MSG_JOIN_LOBBY;
-                                    pkt.lobby_id = lobby_list[i].id;
-                                    pkt.access_code[0] = '\0';
-                                    send(sock, &pkt, sizeof(pkt), 0);
+                                    // Join public room or Spectate
+                                    if (lobby_list[i].status == LOBBY_PLAYING) {
+                                        ClientPacket pkt;
+                                        memset(&pkt, 0, sizeof(pkt));
+                                        pkt.type = MSG_SPECTATE;
+                                        pkt.lobby_id = lobby_list[i].id;
+                                        send(sock, &pkt, sizeof(pkt), 0);
+                                    } else {
+                                        ClientPacket pkt;
+                                        memset(&pkt, 0, sizeof(pkt));
+                                        pkt.type = MSG_JOIN_LOBBY;
+                                        pkt.lobby_id = lobby_list[i].id;
+                                        pkt.access_code[0] = '\0';
+                                        send(sock, &pkt, sizeof(pkt), 0);
+                                    }
                                 }
                                 selected_lobby_idx = i;
                                 break;
