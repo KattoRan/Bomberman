@@ -744,7 +744,7 @@ void render_settings_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Fo
 // Post-match results screen
 void render_post_match_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Font *font_small,
                                int winner_id, int *elo_changes, int *kills, int duration_seconds,
-                               Button *rematch_btn, Button *lobby_btn, GameState *game_state) {
+                               Button *rematch_btn, Button *lobby_btn, GameState *game_state, int my_player_id) {
     int win_w, win_h;
     SDL_GetRendererOutputSize(renderer, &win_w, &win_h);
     
@@ -753,9 +753,25 @@ void render_post_match_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_
     // Winner announcement with actual username
     SDL_Color winner_color = {255, 215, 0, 255};  // Gold
     char winner_text[128] = "VICTORY!";
-    if (game_state && winner_id >= 0 && winner_id < game_state->num_players) {
-        snprintf(winner_text, sizeof(winner_text), "%s Wins!", 
-                 game_state->players[winner_id].username);
+    
+    // Spectator friendly title
+    if (my_player_id == -1) {
+        if (game_state && winner_id >= 0 && winner_id < game_state->num_players) {
+            snprintf(winner_text, sizeof(winner_text), "%s Wins!", 
+                     game_state->players[winner_id].username);
+        } else {
+            strncpy(winner_text, "Draw!", 64);
+        }
+    } else {
+        if (game_state && winner_id >= 0 && winner_id < game_state->num_players) {
+            if (winner_id == my_player_id) {
+                strncpy(winner_text, "VICTORY!", 64);
+            } else {
+                 snprintf(winner_text, sizeof(winner_text), "%s Wins!", 
+                     game_state->players[winner_id].username);
+                winner_color = (SDL_Color){255, 100, 100, 255}; // Red for loss
+            }
+        }
     }
     
     SDL_Surface *surf = TTF_RenderText_Blended(font_large, winner_text, winner_color);
@@ -858,12 +874,20 @@ void render_post_match_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_
         SDL_FreeSurface(surf);
     }
     
-    // Buttons
-    rematch_btn->rect = (SDL_Rect){300, 480, 240, 60};
-    strcpy(rematch_btn->text, "Rematch");
-    draw_button(renderer, font_small, rematch_btn);
-    
-    lobby_btn->rect = (SDL_Rect){580, 480, 240, 60};
-    strcpy(lobby_btn->text, "Return to Lobby");
-    draw_button(renderer, font_small, lobby_btn);
+    // Draw buttons
+    // If spectator, only show "Back to Room" centered
+    if (my_player_id == -1) {
+        lobby_btn->rect = (SDL_Rect){(win_w - 250)/2, 600, 250, 60};
+        strcpy(lobby_btn->text, "Leave Lobby");
+        draw_button(renderer, font_small, lobby_btn);
+    } else {
+        // Player view - show Rematch and Back to Room
+        rematch_btn->rect = (SDL_Rect){(win_w/2) - 270, 600, 250, 60};
+        strcpy(rematch_btn->text, "Rematch");
+        draw_button(renderer, font_small, rematch_btn);
+        
+        lobby_btn->rect = (SDL_Rect){(win_w/2) + 20, 600, 250, 60};
+        strcpy(lobby_btn->text, "Return to Lobby");
+        draw_button(renderer, font_small, lobby_btn);
+    }
 }

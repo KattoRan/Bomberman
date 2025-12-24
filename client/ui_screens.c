@@ -645,9 +645,10 @@ void render_lobby_list_screen(SDL_Renderer *renderer, TTF_Font *font,
             }
             
             // Player count badge (circular)
-            char player_text[16];
-            snprintf(player_text, sizeof(player_text), "%d/4", lobbies[i].num_players);
-            SDL_Rect player_badge = {start_x + list_width - 70, y + 20, 50, 35};
+            char player_text[32];
+            snprintf(player_text, sizeof(player_text), "Ply:%d | Spc:%d", 
+                     lobbies[i].num_players, lobbies[i].spectator_count);
+            SDL_Rect player_badge = {start_x + list_width - 120, y + 20, 100, 35};
             
             SDL_Color badge_bg = lobbies[i].num_players >= 4 ? CLR_DANGER : 
                                lobbies[i].num_players >= 2 ? CLR_WARNING : CLR_SUCCESS;
