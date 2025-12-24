@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS Users (
     password_hash TEXT NOT NULL,             -- Hashed password
     salt TEXT NOT NULL,                      -- Salt for password hashing
     elo_rating INTEGER DEFAULT 1200,         -- ELO ranking (start at 1200)
+    session_token TEXT,                      -- For persistent login
+    session_expiry TIMESTAMP,                -- Token expiration
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_login TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
