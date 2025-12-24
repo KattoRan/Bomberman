@@ -578,26 +578,38 @@ void draw_status_bar(SDL_Renderer *renderer, TTF_Font *font, int my_player_id) {
         
         if (current_state.num_players > 0) {
             Player *p = NULL;
-            if (my_player_id >= 0 && my_player_id < MAX_CLIENTS) {
+            // Spectator check
+            if (my_player_id == -1) {
+                // Show spectator mode indicator
+                SDL_Surface *spec_surface = TTF_RenderText_Solid(font, "SPECTATOR MODE", 
+                                          (SDL_Color){200, 200, 200, 255});
+                if (spec_surface) {
+                    SDL_Texture *spec_texture = SDL_CreateTextureFromSurface(renderer, spec_surface);
+                    int right_padding = game_leave_btn.w + 20;
+                    SDL_Rect spec_rect = {WINDOW_WIDTH - spec_surface->w - right_padding, 
+                                       bar_y + 15, spec_surface->w, spec_surface->h};
+                    SDL_RenderCopy(renderer, spec_texture, NULL, &spec_rect);
+                    SDL_DestroyTexture(spec_texture);
+                    SDL_FreeSurface(spec_surface);
+                }
+            } else if (my_player_id >= 0 && my_player_id < MAX_CLIENTS) {
                 p = &current_state.players[my_player_id];
-            } else {
-                p = &current_state.players[0]; // Fallback
-            }
-            char powerup_text[128];
-            snprintf(powerup_text, sizeof(powerup_text), 
-                    "Bomb %d/%d | Fire %d", 
-                    p->current_bombs, p->max_bombs, p->bomb_range);
-            
-            SDL_Surface *pu_surface = TTF_RenderText_Solid(font, powerup_text, 
-                                      (SDL_Color){255, 215, 0, 255});
-            if (pu_surface) {
-                SDL_Texture *pu_texture = SDL_CreateTextureFromSurface(renderer, pu_surface);
-                int right_padding = game_leave_btn.w + 20;
-                SDL_Rect pu_rect = {WINDOW_WIDTH - pu_surface->w - right_padding, 
-                                   bar_y + 15, pu_surface->w, pu_surface->h};
-                SDL_RenderCopy(renderer, pu_texture, NULL, &pu_rect);
-                SDL_DestroyTexture(pu_texture);
-                SDL_FreeSurface(pu_surface);
+                char powerup_text[128];
+                snprintf(powerup_text, sizeof(powerup_text), 
+                        "Bomb %d/%d | Fire %d", 
+                        p->current_bombs, p->max_bombs, p->bomb_range);
+                
+                SDL_Surface *pu_surface = TTF_RenderText_Solid(font, powerup_text, 
+                                          (SDL_Color){255, 215, 0, 255});
+                if (pu_surface) {
+                    SDL_Texture *pu_texture = SDL_CreateTextureFromSurface(renderer, pu_surface);
+                    int right_padding = game_leave_btn.w + 20;
+                    SDL_Rect pu_rect = {WINDOW_WIDTH - pu_surface->w - right_padding, 
+                                       bar_y + 15, pu_surface->w, pu_surface->h};
+                    SDL_RenderCopy(renderer, pu_texture, NULL, &pu_rect);
+                    SDL_DestroyTexture(pu_texture);
+                    SDL_FreeSurface(pu_surface);
+                }
             }
         }
     }

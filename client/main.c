@@ -445,7 +445,7 @@ void process_server_packet(ServerPacket *pkt) {
                 printf("╚═══════════════════════╝\n\n");
                 
                 // Switch to post-match screen (only once)
-                if (current_screen == SCREEN_GAME && !post_match_shown) {
+                if ((current_screen == SCREEN_GAME || current_screen == SCREEN_LOBBY_ROOM) && !post_match_shown) {
                     current_screen = SCREEN_POST_MATCH;
                     post_match_shown = 1;  // Mark as shown
                     
@@ -1193,9 +1193,16 @@ int main(int argc, char *argv[]) {
                             post_match_shown = 0;
                         }
                         if (is_mouse_inside(btn_return_lobby.rect, mx, my)) {
-                            // Back to Room - Stay in lobby (Waiting state)
-                            // User requested "back to their room" behavior
-                            current_screen = SCREEN_LOBBY_ROOM;
+                            if (my_player_id == -1) {
+                                // Spectator: Leave lobby and return to list
+                                send_packet(MSG_LEAVE_LOBBY, 0);
+                                current_screen = SCREEN_LOBBY_LIST;
+                                send_packet(MSG_LIST_LOBBIES, 0);
+                                lobby_error_message[0] = '\0';
+                            } else {
+                                // Player: Back to Room - Stay in lobby (Waiting state)
+                                current_screen = SCREEN_LOBBY_ROOM;
+                            }
                             post_match_shown = 0;
                         }
                     }
@@ -1738,7 +1745,7 @@ int main(int argc, char *argv[]) {
                                         post_match_winner_id, post_match_elo_changes,
                                         post_match_kills, post_match_duration,
                                         &btn_rematch, &btn_return_lobby,
-                                        &current_state);
+                                        &current_state, my_player_id);
                 break;
             }
 

@@ -105,6 +105,14 @@ int join_lobby_with_code(int lobby_id, const char *username, const char *access_
             return ERR_LOBBY_DUPLICATE_USER;  // Error code for duplicate user
         }
     }
+
+    // **NEW: Check if user is spectating this lobby**
+    for (int i = 0; i < lobby->spectator_count; i++) {
+        if (strcmp(lobby->spectators[i], username) == 0) {
+            printf("[LOBBY] User %s is spectating lobby %d - rejecting player join\n", username, lobby_id);
+            return ERR_LOBBY_DUPLICATE_USER;
+        }
+    }
     
     // Add player to lobby
     Player *p = &lobby->players[lobby->num_players];
