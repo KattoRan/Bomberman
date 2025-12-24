@@ -461,8 +461,6 @@ void render_login_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Font 
 
     // Tính toán vị trí trung tâm cho tất cả elements
     int center_x = win_w / 2;
-    int content_width = 400;
-    int start_x = center_x - content_width / 2;
 
     // Tiêu đề "BOMBERMAN" với hiệu ứng đẹp
     if (font_large) {
@@ -625,7 +623,7 @@ void render_lobby_list_screen(SDL_Renderer *renderer, TTF_Font *font,
         
         if (font) {
             // Tên lobby với private badge
-            char display_name[80];
+            char display_name[100];
             if (lobbies[i].is_private) {
                 snprintf(display_name, sizeof(display_name), "[PRIVATE] %s (ID:%d)", lobbies[i].name, lobbies[i].id);
             } else {
@@ -877,7 +875,6 @@ void render_lobby_room_screen(SDL_Renderer *renderer, TTF_Font *font,
     }
     
     int button_y = win_h - 90;
-    int center_x = win_w / 2;
     
     // Cập nhật vị trí nút Leave (luôn hiện)
     leave_btn->rect.x = 320;

@@ -6,7 +6,7 @@ SDL_CFLAGS = `sdl2-config --cflags`
 SDL_LIBS = `sdl2-config --libs` -lSDL2_image -lSDL2_ttf -lSDL2_mixer -lm
 
 # ---- DIRECTORIES ----
-CLIENT_SRC = client/graphics.c client/main.c client/ui_screens.c client/ui_new_screens.c
+CLIENT_SRC = client/graphics.c client/main.c client/ui_screens.c client/ui_new_screens.c client/packet_handlers.c
 SERVER_SRC = $(wildcard server/*.c)
 
 CLIENT_OBJ = $(CLIENT_SRC:.c=.o)

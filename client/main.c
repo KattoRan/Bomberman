@@ -8,6 +8,8 @@
 #include <fcntl.h>
 #include "../common/protocol.h"
 #include "ui.h" 
+#include "ui_constants.h"
+#include "packet_handlers.h"
 
 extern void render_game(SDL_Renderer*, TTF_Font*, int, int, int);
 extern TTF_Font* init_font();
@@ -60,25 +62,25 @@ int leaderboard_count = 0;
 
 // UI Components - UPDATED SIZES AND POSITIONS
 // Login/Register inputs - centered, adjusted for 1120x720
-InputField inp_user  = {{335, 240, 450, 65}, "", "Username:", 0, 30};
-InputField inp_email = {{335, 340, 450, 65}, "", "Email:",    0, 127};
-InputField inp_pass  = {{335, 440, 450, 65}, "", "Password:", 0, 30};
-Button btn_login = {{335, 560, 180, 60}, "Login",    0, BTN_PRIMARY};
-Button btn_reg   = {{605, 560, 180, 60}, "Register", 0, BTN_PRIMARY};
+InputField inp_user  = {{LOGIN_INPUT_X, LOGIN_INPUT_Y_USERNAME, LOGIN_INPUT_WIDTH, LOGIN_INPUT_HEIGHT}, "", "Username:", 0, 30};
+InputField inp_email = {{LOGIN_INPUT_X, LOGIN_INPUT_Y_EMAIL, LOGIN_INPUT_WIDTH, LOGIN_INPUT_HEIGHT}, "", "Email:",    0, 127};
+InputField inp_pass  = {{LOGIN_INPUT_X, LOGIN_INPUT_Y_PASSWORD, LOGIN_INPUT_WIDTH, LOGIN_INPUT_HEIGHT}, "", "Password:", 0, 30};
+Button btn_login = {{LOGIN_BUTTON_X_LEFT, LOGIN_BUTTON_Y, LOGIN_BUTTON_WIDTH, LOGIN_BUTTON_HEIGHT}, "Login",    0, BTN_PRIMARY};
+Button btn_reg   = {{LOGIN_BUTTON_X_RIGHT, LOGIN_BUTTON_Y, LOGIN_BUTTON_WIDTH, LOGIN_BUTTON_HEIGHT}, "Register", 0, BTN_PRIMARY};
 
 // Lobby list buttons - BOTTOM CENTER, adjusted for 1120x720
-Button btn_create     = {{250, 620, 200, 60}, "Create Room", 0 , BTN_PRIMARY};
-Button btn_refresh    = {{460, 620, 200, 60}, "Refresh", 0 , BTN_PRIMARY};
-Button btn_friends    = {{670, 620, 200, 60}, "Friends", 0, BTN_PRIMARY};
-Button btn_quick_play = {{880, 620, 200, 60}, "Quick Play", 0, BTN_PRIMARY};
-Button btn_profile     = {{850, 20, 130, 50}, "Profile", 0, BTN_PRIMARY};
-Button btn_leaderboard = {{1000, 20, 80, 50}, "Top", 0, BTN_OUTLINE};
+Button btn_create     = {{LOBBY_BTN_CREATE_X, LOBBY_BUTTON_Y, LOBBY_BUTTON_WIDTH, LOBBY_BUTTON_HEIGHT}, "Create Room", 0 , BTN_PRIMARY};
+Button btn_refresh    = {{LOBBY_BTN_REFRESH_X, LOBBY_BUTTON_Y, LOBBY_BUTTON_WIDTH, LOBBY_BUTTON_HEIGHT}, "Refresh", 0 , BTN_PRIMARY};
+Button btn_friends    = {{LOBBY_BTN_FRIENDS_X, LOBBY_BUTTON_Y, LOBBY_BUTTON_WIDTH, LOBBY_BUTTON_HEIGHT}, "Friends", 0, BTN_PRIMARY};
+Button btn_quick_play = {{LOBBY_BTN_QUICKPLAY_X, LOBBY_BUTTON_Y, LOBBY_BUTTON_WIDTH, LOBBY_BUTTON_HEIGHT}, "Quick Play", 0, BTN_PRIMARY};
+Button btn_profile     = {{TOP_BTN_PROFILE_X, TOP_BTN_PROFILE_Y, TOP_BTN_PROFILE_WIDTH, TOP_BTN_PROFILE_HEIGHT}, "Profile", 0, BTN_PRIMARY};
+Button btn_leaderboard = {{TOP_BTN_LEADERBOARD_X, TOP_BTN_LEADERBOARD_Y, TOP_BTN_LEADERBOARD_WIDTH, TOP_BTN_LEADERBOARD_HEIGHT}, "Top", 0, BTN_OUTLINE};
 
 
 // Lobby room buttons
-Button btn_ready = {{80, 630, 200, 50}, "Ready", 0, BTN_PRIMARY};
-Button btn_start = {{80, 630, 200, 50}, "Start Game", 0, BTN_PRIMARY};
-Button btn_leave = {{320, 630, 200, 50}, "Leave", 0, BTN_DANGER};
+Button btn_ready = {{ROOM_BUTTON_X_READY, ROOM_BUTTON_Y, ROOM_BUTTON_WIDTH, ROOM_BUTTON_HEIGHT}, "Ready", 0, BTN_PRIMARY};
+Button btn_start = {{ROOM_BUTTON_X_READY, ROOM_BUTTON_Y, ROOM_BUTTON_WIDTH, ROOM_BUTTON_HEIGHT}, "Start Game", 0, BTN_PRIMARY};
+Button btn_leave = {{ROOM_BUTTON_X_LEAVE, ROOM_BUTTON_Y, ROOM_BUTTON_WIDTH, ROOM_BUTTON_HEIGHT}, "Leave", 0, BTN_DANGER};
 
 
 // Lobby room - host-only buttons
@@ -90,26 +92,25 @@ Button btn_leave = {{320, 630, 200, 50}, "Leave", 0, BTN_DANGER};
 int selected_game_mode = 0;  // 0=Classic, 1=Sudden Death, 2=Fog of War
 
 // Room creation UI - adjusted for 1120x720
-InputField inp_room_name   = {{335, 260, 450, 60}, "", "Room Name:", 0, 63};
-InputField inp_access_code = {{335, 350, 350, 60}, "", "Access Code (6 digits, optional):", 0, 6};
+InputField inp_room_name   = {{ROOM_CREATE_INPUT_X, ROOM_CREATE_NAME_Y, ROOM_CREATE_INPUT_WIDTH, ROOM_CREATE_INPUT_HEIGHT}, "", "Room Name:", 0, 63};
+InputField inp_access_code = {{ROOM_CREATE_INPUT_X, ROOM_CREATE_CODE_Y, 350, ROOM_CREATE_INPUT_HEIGHT}, "", "Access Code (6 digits, optional):", 0, 6};
 int show_create_room_dialog = 0;
 int creating_private_room = 0;
-Button btn_create_confirm = {{370, 440, 220, 60}, "Create", 0, BTN_PRIMARY};
-Button btn_cancel         = {{620, 440, 220, 60}, "Cancel", 0, BTN_DANGER};
+Button btn_create_confirm = {{ROOM_CREATE_BTN_X_CONFIRM, ROOM_CREATE_BTN_Y, ROOM_CREATE_BTN_WIDTH, ROOM_CREATE_BTN_HEIGHT}, "Create", 0, BTN_PRIMARY};
+Button btn_cancel         = {{ROOM_CREATE_BTN_X_CANCEL, ROOM_CREATE_BTN_Y, ROOM_CREATE_BTN_WIDTH, ROOM_CREATE_BTN_HEIGHT}, "Cancel", 0, BTN_DANGER};
 
 // Notification system
 char notification_message[256] = "";
 Uint32 notification_time = 0;
-const int NOTIFICATION_DURATION = 3000; // 3 seconds
 
 // Access code prompt for joining private rooms - adjusted for 1120x720
-InputField inp_join_code = {{335, 320, 450, 60}, "", "Enter 6-digit access code:", 0, 6};
+InputField inp_join_code = {{JOIN_CODE_INPUT_X, JOIN_CODE_INPUT_Y, JOIN_CODE_INPUT_WIDTH, JOIN_CODE_INPUT_HEIGHT}, "", "Enter 6-digit access code:", 0, 6};
 int show_join_code_dialog = 0;
 int selected_private_lobby_id = -1;
 
 // Friend request UI - adjusted for 1120x720
-InputField inp_friend_request = {{400, 620, 360, 60}, "", "Enter display name...", 0, 31};
-Button btn_send_friend_request = {{800, 620, 220, 60}, "Send Request", 0};
+InputField inp_friend_request = {{FRIEND_INPUT_X, FRIEND_INPUT_Y, FRIEND_INPUT_WIDTH, FRIEND_INPUT_HEIGHT}, "", "Enter display name...", 0, 31};
+Button btn_send_friend_request = {{FRIEND_BTN_SEND_X, FRIEND_BTN_SEND_Y, FRIEND_BTN_SEND_WIDTH, FRIEND_BTN_SEND_HEIGHT}, "Send Request", 0, BTN_PRIMARY};
 
 
 // Delete friend confirmation
@@ -118,8 +119,8 @@ int delete_friend_index = -1;
 
 // Settings screen state
 int settings_active_tab = 0;  // 0=Graphics, 1=Controls, 2=Account
-Button btn_settings = {{40, 620, 200, 60}, "Settings", 0};
-Button btn_settings_apply = {{0, 0, 200, 60}, "Apply", 0};
+Button btn_settings = {{SETTINGS_BTN_X, SETTINGS_BTN_Y, SETTINGS_BTN_WIDTH, SETTINGS_BTN_HEIGHT}, "Settings", 0, BTN_PRIMARY};
+Button btn_settings_apply = {{0, 0, LOBBY_BUTTON_WIDTH, LOBBY_BUTTON_HEIGHT}, "Apply", 0, BTN_PRIMARY};
 
 // Post-match screen state  
 int post_match_winner_id = -1;
@@ -127,10 +128,10 @@ int post_match_elo_changes[4] = {0, 0, 0, 0};
 int post_match_kills[4] = {0, 0, 0, 0};
 int post_match_duration = 0;  // Match duration in seconds
 int post_match_shown = 0;  // Prevent showing multiple times
-Button btn_rematch       = {{360, 800, 250, 60}, "Rematch", 0};
-Button btn_return_lobby  = {{610, 800, 250, 60}, "Back to Room", 0};
+Button btn_rematch       = {{POST_MATCH_BTN_X_REMATCH, POST_MATCH_BTN_Y, POST_MATCH_BTN_WIDTH, POST_MATCH_BTN_HEIGHT}, "Rematch", 0, BTN_PRIMARY};
+Button btn_return_lobby  = {{POST_MATCH_BTN_X_RETURN, POST_MATCH_BTN_Y, POST_MATCH_BTN_WIDTH, POST_MATCH_BTN_HEIGHT}, "Back to Room", 0, BTN_PRIMARY};
 
-Button btn_logout        = {{40, 45, 120, 50}, "Logout", BTN_DANGER}; // Top left
+Button btn_logout        = {{LOGOUT_BTN_X, LOGOUT_BTN_Y, LOGOUT_BTN_WIDTH, LOGOUT_BTN_HEIGHT}, "Logout", 0, BTN_DANGER}; // Top left
 
 // Game timer tracking
 Uint32 game_start_time = 0;  // SDL ticks when game started
@@ -152,7 +153,7 @@ int invited_user_ids[50];
 int invited_count = 0;
 
 // Buttons for Invite System
-Button btn_open_invite = {{910, 15, 180, 50}, "Invite Friend", 0, BTN_PRIMARY};
+Button btn_open_invite = {{INVITE_BTN_OPEN_X, INVITE_BTN_OPEN_Y, INVITE_BTN_OPEN_WIDTH, INVITE_BTN_OPEN_HEIGHT}, "Invite Friend", 0, BTN_PRIMARY};
 Button btn_close_invite = {{0, 0, 40, 40}, "X", 0, BTN_DANGER}; // Positioned dynamically
 Button btn_invite_accept = {{0, 0, 150, 50}, "Accept", 0, BTN_PRIMARY};
 Button btn_invite_decline = {{0, 0, 150, 50}, "Decline", 0, BTN_DANGER};
@@ -160,7 +161,7 @@ Button btn_invite_decline = {{0, 0, 150, 50}, "Decline", 0, BTN_DANGER};
 ChatMessage chat_history[MAX_CHAT_MESSAGES];
 int chat_count = 0;
 int chat_panel_open = 0;  // Toggle for gameplay (0=mini, 1=full)
-InputField inp_chat_message = {{0, 0, 600, 40}, "", "", 0, 199};  // Max 199 chars + null
+InputField inp_chat_message = {{0, 0, CHAT_INPUT_WIDTH, CHAT_INPUT_HEIGHT}, "", "", 0, CHAT_MESSAGE_MAX_LENGTH};  // Max 199 chars + null
 
 // --- Session Persistence ---
 char session_file_path[256];
@@ -330,282 +331,7 @@ void send_packet(int type, int data) {
 }
 
 void process_server_packet(ServerPacket *pkt) {
-    switch (pkt->type) {
-        case MSG_AUTH_RESPONSE:
-            if (pkt->code == AUTH_SUCCESS) {
-                if (current_screen == SCREEN_LOGIN || current_screen == SCREEN_REGISTER) {
-                    current_screen = SCREEN_LOBBY_LIST;
-                }
-                send_packet(MSG_LIST_LOBBIES, 0); 
-                
-                // Save session token
-                if (pkt->payload.auth.session_token[0] != '\0') {
-                    save_session_token(pkt->payload.auth.session_token);
-                }
-                
-                strncpy(my_username, pkt->payload.auth.username, MAX_USERNAME); // Use server provided username
-                status_message[0] = '\0';
-                
-                // Show welcome notification
-                snprintf(notification_message, sizeof(notification_message), "Welcome, %s!", my_username);
-                notification_time = SDL_GetTicks();
-                
-                printf("[CLIENT] Authenticated as: %s\n", my_username);
-            } else {
-                if (current_screen == SCREEN_LOGIN) { 
-                    // Only show errors if we are actually ON the login screen
-                    // (prevents auto-login failure from showing alert, it just stays on login)
-                    if (pkt->code == AUTH_FAIL && pkt->message[0] == '\0') {
-                         strcpy(status_message, "Session expired");
-                    } else {
-                         strncpy(status_message, pkt->message, sizeof(status_message));
-                    }
-                } else {
-                    // Auto-login failed implicitly -> force to login screen
-                    current_screen = SCREEN_LOGIN; 
-                    clear_session_token();
-                }
-                if (pkt->code == AUTH_USER_EXISTS) {
-                    strncpy(status_message,
-                            "Email and username are taken. Try another.",
-                            sizeof(status_message));
-                } else if (pkt->code == AUTH_USERNAME_EXISTS) {
-                    strncpy(status_message,
-                            "Username is taken. Try another.",
-                            sizeof(status_message));
-                } else if (pkt->code == AUTH_EMAIL_EXISTS) {
-                    strncpy(status_message,
-                            "Email is taken. Try another.",
-                            sizeof(status_message));
-                } else {
-                    strncpy(status_message, pkt->message, sizeof(status_message));
-                }
-            }
-            break;
-
-        case MSG_LOBBY_LIST:
-            lobby_count = pkt->payload.lobby_list.count;
-            memcpy(lobby_list, pkt->payload.lobby_list.lobbies, sizeof(lobby_list));
-            break;
-
-        case MSG_LOBBY_UPDATE:
-            current_lobby = pkt->payload.lobby;
-            
-            // Show access code notification if we just created a private room
-            static int last_lobby_id = -1;
-            if (current_lobby.is_private && current_lobby.id != last_lobby_id && 
-                strcmp(current_lobby.host_username, my_username) == 0) {
-                snprintf(notification_message, sizeof(notification_message), 
-                        "Private room created! Code: %s", current_lobby.access_code);
-                notification_time = SDL_GetTicks();
-            }
-            last_lobby_id = current_lobby.id;
-            
-            // Find my player ID
-            my_player_id = -1;
-            for (int i = 0; i < current_lobby.num_players; i++) {
-                if (strcmp(current_lobby.players[i].username, my_username) == 0) {
-                    my_player_id = i;
-                    break;
-                }
-            }
-            
-            printf("[CLIENT] My player_id: %d, Host_id: %d\n", my_player_id, current_lobby.host_id);
-            
-            if (current_lobby.status == LOBBY_PLAYING) {
-                if (current_screen != SCREEN_GAME) {
-                    add_notification("Game started!", (SDL_Color){0, 255, 0, 255});
-                    game_start_time = SDL_GetTicks();  // Start the timer
-                    post_match_shown = 0;  // Reset flag for new match
-                }
-                current_screen = SCREEN_GAME;
-                memset(&current_state, 0, sizeof(GameState));
-                memset(&previous_state, 0, sizeof(GameState));
-                lobby_error_message[0] = '\0';
-            } else {
-                // Don't switch to lobby room if showing post-match screen
-                if (current_screen != SCREEN_POST_MATCH) {
-                    current_screen = SCREEN_LOBBY_ROOM;
-                }
-            }
-            break;
-
-        case MSG_GAME_STATE:
-            current_state = pkt->payload.game_state;
-            check_game_changes();
-            
-            if (current_state.game_status == GAME_ENDED) {
-                printf("\n╔═══════════════════════╗\n");
-                printf("║      GAME ENDED!           ║\n");
-                if (current_state.winner_id >= 0) {
-                    printf("║  Winner: %s\n", 
-                           current_state.players[current_state.winner_id].username);
-                    
-                    char msg[128];
-                    if (current_state.winner_id == 0) {
-                        snprintf(msg, sizeof(msg), "Congratulations! You Win!");
-                        add_notification(msg, (SDL_Color){0, 255, 0, 255});
-                    } else {
-                        snprintf(msg, sizeof(msg), "%s has won!", 
-                                current_state.players[current_state.winner_id].username);
-                        add_notification(msg, (SDL_Color){255, 215, 0, 255});
-                    }
-                } else {
-                    printf("║      Draw!                 ║\n");
-                    add_notification("Match draw!", (SDL_Color){200, 200, 200, 255});
-                }
-                printf("╚═══════════════════════╝\n\n");
-                
-                // Switch to post-match screen (only once)
-                if ((current_screen == SCREEN_GAME || current_screen == SCREEN_LOBBY_ROOM) && !post_match_shown) {
-                    current_screen = SCREEN_POST_MATCH;
-                    post_match_shown = 1;  // Mark as shown
-                    
-                    // Populate post-match data with REAL values
-                    post_match_winner_id = current_state.winner_id;
-                    post_match_duration = current_state.match_duration_seconds;
-                    printf("[CLIENT] Post-match data from server:\n");
-                    for (int i = 0; i < current_state.num_players && i < MAX_CLIENTS; i++) {
-                        post_match_elo_changes[i] = current_state.elo_changes[i];  // Real ELO changes!
-                        post_match_kills[i] = current_state.kills[i];  // Real kills!
-                        printf("[CLIENT]   Player %d: ELO change = %d, Kills = %d\n", 
-                               i, post_match_elo_changes[i], post_match_kills[i]);
-                    }
-                    printf("[CLIENT]   Match duration: %d seconds\n", post_match_duration);
-                    
-                    printf("[CLIENT] Switched to post-match screen\n");
-                }
-            }
-            break;
-            
-        case MSG_ERROR:
-            strncpy(status_message, pkt->message, sizeof(status_message));
-            strncpy(lobby_error_message, pkt->message, sizeof(lobby_error_message));
-            break;
-            
-        case MSG_FRIEND_LIST_RESPONSE:
-            // Server sends: total count in payload.friend_list.count
-            // code field bit-packed: low byte = pending_count, high byte = sent_count
-            pending_count = pkt->code & 0xFF;  // Low byte
-            sent_count = (pkt->code >> 8) & 0xFF;  // High byte
-            friends_count = pkt->payload.friend_list.count - pending_count - sent_count;
-            
-            // Copy accepted friends (first part of array)
-            if (friends_count > 0 && friends_count <= 50) {
-                memcpy(friends_list, pkt->payload.friend_list.friends, 
-                       sizeof(FriendInfo) * friends_count);
-            }
-            
-            // Copy pending requests (second part)
-            if (pending_count > 0 && pending_count <= 50) {
-                memcpy(pending_requests, &pkt->payload.friend_list.friends[friends_count], 
-                       sizeof(FriendInfo) * pending_count);
-                
-                // Show notification for new pending requests
-                if (pending_count > 0) {
-                    snprintf(notification_message, sizeof(notification_message),
-                            "You have %d pending friend request%s!", pending_count, pending_count > 1 ? "s" : "");
-                    notification_time = SDL_GetTicks();
-                }
-            }
-            
-            // Copy sent requests (third part)
-            if (sent_count > 0 && sent_count <= 50) {
-                memcpy(sent_requests, &pkt->payload.friend_list.friends[friends_count + pending_count],
-                       sizeof(FriendInfo) * sent_count);
-            }
-            
-            printf("[CLIENT] Received %d friends, %d pending, %d sent \n", friends_count, pending_count, sent_count);
-            break;
-        
-        case MSG_FRIEND_RESPONSE:
-            if (pkt->code == 0) {
-                // Success - show notification
-                snprintf(notification_message, sizeof(notification_message),
-                        "Friend request sent!");
-                notification_time = SDL_GetTicks();
-                // Refresh friends list
-                send_packet(MSG_FRIEND_LIST, 0);
-            } else {
-                // Error
-                snprintf(notification_message, sizeof(notification_message),
-                        "Request failed");
-                notification_time = SDL_GetTicks();
-            }
-            break;
-            
-        case MSG_PROFILE_RESPONSE:
-            my_profile = pkt->payload.profile;
-            printf("[CLIENT] Received profile: ELO %d, Matches %d\n", 
-                   my_profile.elo_rating, my_profile.total_matches);
-            break;
-            
-        case MSG_LEADERBOARD_RESPONSE:
-            leaderboard_count = pkt->payload.leaderboard.count;
-            if (leaderboard_count > 100) leaderboard_count = 100;
-            memcpy(leaderboard, pkt->payload.leaderboard.entries,
-                   sizeof(LeaderboardEntry) * leaderboard_count);
-            printf("[CLIENT] Received %d leaderboard entries\n", leaderboard_count);
-            break;
-            
-        case MSG_NOTIFICATION:
-            // Handle notifications (including power-up caps during game)
-            if (pkt->message[0] != '\0') {
-                snprintf(notification_message, sizeof(notification_message), "%s", pkt->message);
-                notification_time = SDL_GetTicks();
-                printf("[CLIENT] Notification: %s\n", pkt->message);
-            }
-            break;
-        
-        case MSG_CHAT:
-        {
-            // Store incoming chat message
-            if (chat_count < MAX_CHAT_MESSAGES) {
-                ChatMessage* msg = &chat_history[chat_count];
-                strncpy(msg->sender, pkt->payload.chat_msg.sender_username, MAX_USERNAME - 1);
-                msg->sender[MAX_USERNAME - 1] = '\0';
-                strncpy(msg->message, pkt->payload.chat_msg.message, 199);
-                msg->message[199] = '\0';
-                msg->timestamp = SDL_GetTicks();
-                msg->player_id = pkt->payload.chat_msg.player_id;
-                msg->is_current_user = (strcmp(msg->sender, my_username) == 0) ? 1 : 0;
-                chat_count++;
-            } else {
-                // Shift array and add new message (FIFO)
-                for (int i = 0; i < MAX_CHAT_MESSAGES - 1; i++) {
-                    chat_history[i] = chat_history[i + 1];
-                }
-                ChatMessage* msg = &chat_history[MAX_CHAT_MESSAGES - 1];
-                strncpy(msg->sender, pkt->payload.chat_msg.sender_username, MAX_USERNAME - 1);
-                msg->sender[MAX_USERNAME - 1] = '\0';
-                strncpy(msg->message, pkt->payload.chat_msg.message, 199);
-                msg->message[199] = '\0';
-                msg->timestamp = SDL_GetTicks();
-                msg->player_id = pkt->payload.chat_msg.player_id;
-                msg->is_current_user = (strcmp(msg->sender, my_username) == 0) ? 1 : 0;
-            }
-            
-            printf("[CLIENT] Chat - %s: %s\n", pkt->payload.chat_msg.sender_username, pkt->payload.chat_msg.message);
-            break;
-        }
-
-        case MSG_INVITE_RECEIVED:
-            {
-                current_invite.lobby_id = pkt->payload.invite.lobby_id;
-                strncpy(current_invite.room_name, pkt->payload.invite.room_name, 63);
-                strncpy(current_invite.host_name, pkt->payload.invite.host_name, 31);
-                strncpy(current_invite.access_code, pkt->payload.invite.access_code, 7);
-                current_invite.game_mode = pkt->payload.invite.game_mode;
-                current_invite.is_active = 1;
-
-                snprintf(notification_message, sizeof(notification_message), 
-                        "Game Invite from %s!", current_invite.host_name);
-                notification_time = SDL_GetTicks();
-                printf("[CLIENT] Received invite to Lobby %d from %s (Code: %s)\n", 
-                       current_invite.lobby_id, current_invite.host_name, current_invite.access_code);
-            }
-            break;
-    }
+    handle_server_packet(pkt);
 }
 
 // --- Main Client ---
@@ -654,6 +380,9 @@ int main(int argc, char *argv[]) {
         // Note: We stay on SCREEN_LOGIN until server responds. 
         // If success -> SCREEN_LOBBY_LIST or SCREEN_GAME (handled in MSG_AUTH_RESPONSE/MSG_GAME_STATE)
     }
+
+    // Initialize packet handler system
+    init_client_packet_handlers();
 
     // 2. Setup SDL - FULLSCREEN 1120x720
     SDL_Init(SDL_INIT_VIDEO);
@@ -1120,7 +849,7 @@ int main(int argc, char *argv[]) {
                             // Calculated same way as render_invite_overlay
                             int win_w, win_h;
                             SDL_GetRendererOutputSize(rend, &win_w, &win_h);
-                            int overlay_w = 500, overlay_h = 500;
+                            int overlay_w = 500;
                             int overlay_x = (win_w - overlay_w) / 2;
                             int overlay_y = 110;
                             int list_y = overlay_y + 80;
@@ -1227,7 +956,6 @@ int main(int argc, char *argv[]) {
                         // Kick buttons (host only, check for each player)
                         else if (my_player_id == current_lobby.host_id) {
                             int card_y = 120;
-                            int card_width = 440;
                             int start_x = 80;
                             
                             for (int i = 0; i < current_lobby.num_players; i++) {
@@ -1873,7 +1601,7 @@ int main(int argc, char *argv[]) {
             case SCREEN_SETTINGS: {
                 // Update hover states
                 btn_settings_apply.is_hovered = is_mouse_inside((SDL_Rect){760, 850, 200, 60}, mx, my);
-                Button back_btn_temp = {{980, 850, 200, 60}, "Back", 0};
+                Button back_btn_temp = {{980, 850, 200, 60}, "Back", 0, BTN_PRIMARY};
                 back_btn_temp.is_hovered = is_mouse_inside(back_btn_temp.rect, mx, my);
                 
                 render_settings_screen(rend, font_large, font_small,
@@ -1902,7 +1630,7 @@ int main(int argc, char *argv[]) {
         if (current_screen != SCREEN_LOGIN &&
             current_screen != SCREEN_REGISTER &&
             notification_message[0] != '\0' &&
-            SDL_GetTicks() - notification_time < NOTIFICATION_DURATION) {
+            SDL_GetTicks() - notification_time < (Uint32)NOTIFICATION_DURATION_MS) {
             int win_w, win_h;
             SDL_GetRendererOutputSize(rend, &win_w, &win_h);
             
@@ -1935,7 +1663,7 @@ int main(int argc, char *argv[]) {
                 SDL_DestroyTexture(tex);
                 SDL_FreeSurface(notif);
             }
-        } else if (SDL_GetTicks() - notification_time >= NOTIFICATION_DURATION) {
+        } else if (SDL_GetTicks() - notification_time >= (Uint32)NOTIFICATION_DURATION_MS) {
             notification_message[0] = '\0'; // Clear after duration
         }
 
