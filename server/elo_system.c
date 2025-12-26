@@ -34,7 +34,7 @@ int calculate_elo_change(int player_rating, int avg_opponent_rating,
     return change;
 }
 
-// Update ELO ratings for all players in a match
+// Update ELO ratings for all players in a match using Pairwise Comparison
 // Returns 0 on success, -1 on failure
 int elo_update_after_match(int *player_ids, int *placements, int num_players, int *out_elo_changes) {
     if (num_players < 2) return -1;
@@ -67,20 +67,37 @@ int elo_update_after_match(int *player_ids, int *placements, int num_players, in
         sqlite3_finalize(stmt);
     }
     
-    // Calculate average opponent rating for each player
-    int total_rating = 0;
-    for (int i = 0; i < num_players; i++) {
-        total_rating += ratings[i];
-    }
+    printf("[ELO] Match results (Pairwise Calculation):\n");
     
-    // Update each player's ELO
-    printf("[ELO] Match results:\n");
+    // Calculate ELO change for each player using pairwise comparison
     for (int i = 0; i < num_players; i++) {
-        // Average rating of opponents (exclude this player)
-        int avg_opponent = (total_rating - ratings[i]) / (num_players - 1);
+        double total_expected = 0;
+        double total_actual = 0;
         
-        int elo_change = calculate_elo_change(ratings[i], avg_opponent, 
-                                               placements[i], match_counts[i]);
+        // Compare against every other player
+        for (int j = 0; j < num_players; j++) {
+            if (i == j) continue;
+            
+            // Expected score vs player j
+            double expected = calculate_expected_score(ratings[i], ratings[j]);
+            total_expected += expected;
+            
+            // Actual score vs player j
+            // lower placement number = better rank (1 is winner)
+            double actual;
+            if (placements[i] < placements[j]) {
+                actual = 1.0; // Win
+            } else if (placements[i] > placements[j]) {
+                actual = 0.0; // Loss
+            } else {
+                actual = 0.5; // Draw (shouldn't happen in current logic but good for safety)
+            }
+            total_actual += actual;
+        }
+        
+        // Calculate final change
+        int k = get_k_factor(match_counts[i]);
+        int elo_change = (int)(k * (total_actual - total_expected));
         int new_rating = ratings[i] + elo_change;
         
         // Ensure rating doesn't go below 0
@@ -93,9 +110,10 @@ int elo_update_after_match(int *player_ids, int *placements, int num_players, in
         
         // Update database
         if (db_update_elo(player_ids[i], new_rating) == 0) {
-            printf("[ELO]   Player %d: %d -> %d (%s%d)\n", 
-                   player_ids[i], ratings[i], new_rating,
-                   (elo_change >= 0) ? "+" : "", elo_change);
+            printf("[ELO]   Player %d (Rank %d): %d -> %d (%s%d) [Score: %.1f/%.1f]\n", 
+                   player_ids[i], placements[i], ratings[i], new_rating,
+                   (elo_change >= 0) ? "+" : "", elo_change, 
+                   total_actual, total_expected);
         }
     }
     
