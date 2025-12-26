@@ -175,7 +175,12 @@ void handle_get_profile(int socket_fd, ClientPacket *pkt) {
     memset(&response, 0, sizeof(ServerPacket));
     response.type = MSG_PROFILE_RESPONSE;
     
-    int target_id = (pkt->data > 0) ? pkt->data : client->user_id;
+    int target_id = client->user_id;
+    if (pkt->target_user_id > 0) {
+        target_id = pkt->target_user_id;
+    } else if (pkt->data > 0) {
+        target_id = pkt->data;
+    }
     
     if (stats_get_profile(target_id, &response.payload.profile) == 0) {
         response.code = 0; // Success
