@@ -8,9 +8,10 @@ SDL_LIBS = `sdl2-config --libs` -lSDL2_image -lSDL2_ttf -lSDL2_mixer -lm
 # ---- DIRECTORIES ----
 CLIENT_SRC = client/graphics.c client/main.c client/ui_screens.c client/ui_new_screens.c
 SERVER_SRC = $(wildcard server/*.c)
+SERVER_HANDLERS = $(wildcard server/handlers/*.c)
 
 CLIENT_OBJ = $(CLIENT_SRC:.c=.o)
-SERVER_OBJ = $(SERVER_SRC:.c=.o)
+SERVER_OBJ = $(SERVER_SRC:.c=.o) $(SERVER_HANDLERS:.c=.o)
 
 CLIENT_BIN = client_bin
 SERVER_BIN = server_bin
@@ -36,7 +37,7 @@ server/%.o: server/%.c
 
 # ---- CLEAN ----
 clean:
-	rm -f client/*.o server/*.o $(CLIENT_BIN) $(SERVER_BIN)
+	rm -f client/*.o server/*.o server/handlers/*.o $(CLIENT_BIN) $(SERVER_BIN)
 
 # ---- RUN ----
 run-client: $(CLIENT_BIN)
