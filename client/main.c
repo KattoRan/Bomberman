@@ -38,7 +38,7 @@ char lobby_error_message[256] = "";
 Uint32 error_message_time = 0;
 
 // Data Store
-Lobby lobby_list[MAX_LOBBIES];
+LobbySummary lobby_list[MAX_LOBBIES];
 int lobby_count = 0;
 int selected_lobby_idx = -1;
 Lobby current_lobby;

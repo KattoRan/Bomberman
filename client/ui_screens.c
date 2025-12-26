@@ -562,7 +562,7 @@ void render_login_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Font 
 
 // 2. Màn hình Danh sách phòng - Modern Card Design
 void render_lobby_list_screen(SDL_Renderer *renderer, TTF_Font *font,
-                              Lobby *lobbies, int lobby_count,
+                              LobbySummary *lobbies, int lobby_count,
                               Button *create_btn, Button *refresh_btn,
                               int selected_lobby) {
     int win_w, win_h;

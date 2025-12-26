@@ -24,6 +24,26 @@ Lobby* find_lobby(int lobby_id) {
     return NULL;
 }
 
+int get_lobby_list(LobbySummary *out_lobbies) {
+    int count = 0;
+    for (int i = 0; i < MAX_LOBBIES; i++) {
+        if (lobbies[i].id != -1) {
+             out_lobbies[count].id = lobbies[i].id;
+             strncpy(out_lobbies[count].name, lobbies[i].name, MAX_ROOM_NAME - 1);
+             out_lobbies[count].name[MAX_ROOM_NAME - 1] = '\0';
+             out_lobbies[count].num_players = lobbies[i].num_players;
+             out_lobbies[count].max_players = MAX_CLIENTS; // or derive from game mode if needed
+             out_lobbies[count].spectator_count = lobbies[i].spectator_count;
+             out_lobbies[count].game_mode = lobbies[i].game_mode;
+             out_lobbies[count].status = lobbies[i].status;
+             out_lobbies[count].is_private = lobbies[i].is_private;
+             out_lobbies[count].is_locked = lobbies[i].is_locked;
+             count++;
+        }
+    }
+    return count;
+}
+
 // Create a new lobby
 int create_lobby(const char *room_name, const char *host_username, int is_private, const char *access_code, int game_mode) {
     int slot = -1;
@@ -216,16 +236,7 @@ int start_game(int lobby_id, const char *username) {
     return 0;
 }
 
-int get_lobby_list(Lobby *out_lobbies) {
-    int count = 0;
-    for (int i = 0; i < MAX_LOBBIES; i++) {
-        // CHANGED: Include LOBBY_PLAYING rooms so spectators can see them
-        if (lobbies[i].id != -1) {
-            out_lobbies[count++] = lobbies[i];
-        }
-    }
-    return count;
-}
+
 
 int find_user_lobby(const char *username) {
     for (int i = 0; i < MAX_LOBBIES; i++) {
