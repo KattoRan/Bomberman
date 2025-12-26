@@ -131,6 +131,22 @@ void handle_leave_game(int socket_fd, ClientPacket *pkt) {
 
     if (client->lobby_id != -1) {
         int lid = client->lobby_id;
+
+        // Try to leave as spectator first
+        if (leave_spectator(lid, client->username) == 0) {
+            client->lobby_id = -1;
+            client->player_id_in_game = -1;
+            broadcast_lobby_update(lid);
+            broadcast_lobby_list();
+            
+            ServerPacket response;
+            memset(&response, 0, sizeof(ServerPacket));
+            response.type = MSG_LOBBY_LIST;
+            response.payload.lobby_list.count = get_lobby_list(response.payload.lobby_list.lobbies);
+            send_response(socket_fd, &response);
+            return;
+        }
+
         forfeit_player_from_game(lid, client->username);
         leave_lobby(lid, client->username);
         client->lobby_id = -1;

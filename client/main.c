@@ -24,7 +24,6 @@ typedef enum {
     SCREEN_FRIENDS,
     SCREEN_PROFILE,
     SCREEN_LEADERBOARD,
-    SCREEN_SETTINGS,
     SCREEN_POST_MATCH
 } ScreenState;
 
@@ -38,7 +37,7 @@ char lobby_error_message[256] = "";
 Uint32 error_message_time = 0;
 
 // Data Store
-Lobby lobby_list[MAX_LOBBIES];
+LobbySummary lobby_list[MAX_LOBBIES];
 int lobby_count = 0;
 int selected_lobby_idx = -1;
 Lobby current_lobby;
@@ -70,7 +69,7 @@ Button btn_reg   = {{605, 560, 180, 60}, "Register", 0, BTN_PRIMARY};
 Button btn_create     = {{250, 620, 200, 60}, "Create Room", 0 , BTN_PRIMARY};
 Button btn_refresh    = {{460, 620, 200, 60}, "Refresh", 0 , BTN_PRIMARY};
 Button btn_friends    = {{670, 620, 200, 60}, "Friends", 0, BTN_PRIMARY};
-Button btn_quick_play = {{880, 620, 200, 60}, "Quick Play", 0, BTN_PRIMARY};
+// Button btn_quick_play removed
 Button btn_profile     = {{850, 20, 130, 50}, "Profile", 0, BTN_PRIMARY};
 Button btn_leaderboard = {{1000, 20, 80, 50}, "Top", 0, BTN_OUTLINE};
 
@@ -116,10 +115,7 @@ Button btn_send_friend_request = {{800, 620, 220, 60}, "Send Request", 0};
 int show_delete_confirm = 0;
 int delete_friend_index = -1;
 
-// Settings screen state
-int settings_active_tab = 0;  // 0=Graphics, 1=Controls, 2=Account
-Button btn_settings = {{40, 620, 200, 60}, "Settings", 0};
-Button btn_settings_apply = {{0, 0, 200, 60}, "Apply", 0};
+// Settings screen state removed
 
 // Post-match screen state  
 int post_match_winner_id = -1;
@@ -410,7 +406,15 @@ void process_server_packet(ServerPacket *pkt) {
                 }
             }
             
-            // printf("[CLIENT] My player_id: %d, Host_id: %d\n", my_player_id, current_lobby.host_id);
+            // --- FIX: CLEAR CHAT HISTORY ON NEW ROOM ---
+            // If we are entering a new lobby (not just an update for the same one), clear chat
+            static int chat_last_lobby_id = -2;
+            if (current_lobby.id != chat_last_lobby_id) {
+                chat_count = 0;
+                memset(chat_history, 0, sizeof(chat_history));
+                chat_last_lobby_id = current_lobby.id;
+                // printf("[CLIENT] Chat history cleared for new room %d\n", current_lobby.id);
+            }
             
             if (current_lobby.status == LOBBY_PLAYING) {
                 if (current_screen != SCREEN_GAME) {
@@ -588,6 +592,8 @@ void process_server_packet(ServerPacket *pkt) {
             // printf("[CLIENT] Chat - %s: %s\n", pkt->payload.chat_msg.sender_username, pkt->payload.chat_msg.message);
             break;
         }
+
+
 
         case MSG_INVITE_RECEIVED:
             {
@@ -1037,15 +1043,16 @@ int main(int argc, char *argv[]) {
                             send_packet(MSG_GET_LEADERBOARD, 0);
                             current_screen = SCREEN_LEADERBOARD;
                         }
-                        if (is_mouse_inside(btn_quick_play.rect, mx, my)) {
-                            snprintf(notification_message, sizeof(notification_message),
-                                    "Quick Play matchmaking coming soon!");
-                            notification_time = SDL_GetTicks();
+                        if (is_mouse_inside(btn_profile.rect, mx, my)) {
+                            send_packet(MSG_GET_PROFILE, 0);
+                            current_screen = SCREEN_PROFILE;
                         }
-                        if (is_mouse_inside(btn_settings.rect, mx, my)) {
-                            current_screen = SCREEN_SETTINGS;
-                            settings_active_tab = 0; 
+                        if (is_mouse_inside(btn_leaderboard.rect, mx, my)) {
+                            send_packet(MSG_GET_LEADERBOARD, 0);
+                            current_screen = SCREEN_LEADERBOARD;
                         }
+                        // Quick Play removed
+                        // Settings removed
                         if (is_mouse_inside(btn_logout.rect, mx, my)) {
                             clear_session_token();
                             current_screen = SCREEN_LOGIN;
@@ -1054,27 +1061,37 @@ int main(int argc, char *argv[]) {
                             inp_pass.text[0] = '\0';
                         }
                         
-                        // Lobby click detection
-                        int y = 120;
-                        int list_width = 640;
-                        int card_height = 80;
-                        int start_x = 240;
+                        // Lobby click detection - Updated for new button layout
+                        int y = 120; // Fixed from top
+                        // FIXED lobby cards for 1120x720 (Must match ui_screens.c)
+                        int list_width = 740;  
+                        int card_height = 80;  
+                        int win_w;
+                        SDL_GetRendererOutputSize(rend, &win_w, NULL);
+                        int start_x = (win_w - list_width) / 2;
                         
                         for (int i = 0; i < lobby_count; i++) {
-                            SDL_Rect r = {start_x, y, list_width, card_height};
-                            if (is_mouse_inside(r, mx, my)) {
-                                if (lobby_list[i].is_private) {
-                                    selected_private_lobby_id = lobby_list[i].id;
-                                    show_join_code_dialog = 1;
-                                    inp_join_code.text[0] = '\0';
-                                    inp_join_code.is_active = 1;
+                            // Calculate button positions relative to card (must match ui_screens.c)
+                            int btn_y = y + 20;
+                            int btn_h = 40;
+                            
+                            // Join Button Rect
+                            SDL_Rect join_rect = {start_x + list_width - 200, btn_y, 90, btn_h};
+                            
+                            // Spectate Button Rect
+                            SDL_Rect spectate_rect = {start_x + list_width - 100, btn_y, 90, btn_h};
+
+                            // JOIN CLICK
+                            if (is_mouse_inside(join_rect, mx, my)) {
+                                if (lobby_list[i].status == LOBBY_PLAYING) {
+                                    // Disabled - do nothing
                                 } else {
-                                    if (lobby_list[i].status == LOBBY_PLAYING) {
-                                        ClientPacket pkt;
-                                        memset(&pkt, 0, sizeof(pkt));
-                                        pkt.type = MSG_SPECTATE;
-                                        pkt.lobby_id = lobby_list[i].id;
-                                        send(sock, &pkt, sizeof(pkt), 0);
+                                    // Join Logic
+                                    if (lobby_list[i].is_private) {
+                                        selected_private_lobby_id = lobby_list[i].id;
+                                        show_join_code_dialog = 1;
+                                        inp_join_code.text[0] = '\0';
+                                        inp_join_code.is_active = 1;
                                     } else {
                                         ClientPacket pkt;
                                         memset(&pkt, 0, sizeof(pkt));
@@ -1084,10 +1101,30 @@ int main(int argc, char *argv[]) {
                                         send(sock, &pkt, sizeof(pkt), 0);
                                     }
                                 }
+                                selected_lobby_idx = i; // Optionally select it
+                                break; 
+                            }
+                            
+                            // SPECTATE CLICK
+                            if (is_mouse_inside(spectate_rect, mx, my)) {
+                                ClientPacket pkt;
+                                memset(&pkt, 0, sizeof(pkt));
+                                pkt.type = MSG_SPECTATE;
+                                pkt.lobby_id = lobby_list[i].id;
+                                send(sock, &pkt, sizeof(pkt), 0);
+                                
                                 selected_lobby_idx = i;
                                 break;
                             }
-                            y += 85; 
+                            
+                            // Keep card selection if clicking elsewhere on card?
+                            // Optional: allows selecting without joining
+                            SDL_Rect card_rect = {start_x, y, list_width, card_height};
+                            if (is_mouse_inside(card_rect, mx, my)) {
+                                selected_lobby_idx = i;
+                            }
+                            
+                            y += card_height + 10; 
                         }
                     }
                     break;
@@ -1134,6 +1171,7 @@ int main(int argc, char *argv[]) {
                                                 memset(&pkt, 0, sizeof(pkt));
                                                 pkt.type = MSG_FRIEND_INVITE;
                                                 strncpy(pkt.target_display_name, friends_list[i].display_name, MAX_DISPLAY_NAME-1);
+                                                pkt.target_user_id = friends_list[i].user_id; // Use ID for lookup
                                                 send(sock, &pkt, sizeof(pkt), 0);
                                                 
                                                 // Track invited user locally
@@ -1317,8 +1355,13 @@ int main(int argc, char *argv[]) {
                                 send_packet(MSG_LIST_LOBBIES, 0);
                                 lobby_error_message[0] = '\0';
                             } else {
-                                // Player: Back to Room - Stay in lobby (Waiting state)
-                                current_screen = SCREEN_LOBBY_ROOM;
+                                // Player: Back to Room - Actually we want to "Return to Lobby LIST" 
+                                // because the user is "stuck" otherwise.
+                                // ORIGINAL BUG: "Return to Lobby" kept user in room (SCREEN_LOBBY_ROOM). 
+                                // FIX: Send LEAVE_LOBBY and go to SCREEN_LOBBY_LIST
+                                send_packet(MSG_LEAVE_LOBBY, 0);
+                                current_screen = SCREEN_LOBBY_LIST;
+                                send_packet(MSG_LIST_LOBBIES, 0);
                             }
                             post_match_shown = 0;
                         }
@@ -1545,39 +1588,7 @@ int main(int argc, char *argv[]) {
                     break;
                 }
                 
-                case SCREEN_SETTINGS: {
-                    if (e.type == SDL_MOUSEBUTTONDOWN) {
-                        int win_w, win_h;
-                        SDL_GetRendererOutputSize(rend, &win_w, &win_h);
-                        
-                        // Back button
-                        if (is_mouse_inside((SDL_Rect){980, 850, 200, 60}, mx, my)) {
-                            current_screen = SCREEN_LOBBY_LIST;
-                            send_packet(MSG_LIST_LOBBIES, 0);
-                        }
-                        
-                        // Tab switching (3 tabs)
-                        int tab_y = 140;
-                        int tab_width = 180;
-                        int tab_height = 50;
-                        int tab_spacing = 20;
-                        int tabs_start_x = (win_w - (tab_width * 3 + tab_spacing * 2)) / 2;
-                        
-                        for (int i = 0; i < 3; i++) {
-                            SDL_Rect tab_rect = {
-                                tabs_start_x + i * (tab_width + tab_spacing), 
-                                tab_y, 
-                                tab_width, 
-                                tab_height
-                            };
-                            if (is_mouse_inside(tab_rect, mx, my)) {
-                                settings_active_tab = i;
-                                break;
-                            }
-                        }
-                    }
-                    break;
-                }
+                // SCREEN_SETTINGS case removed
 
                 default:
                     break;
@@ -1638,8 +1649,8 @@ int main(int argc, char *argv[]) {
                 btn_create.is_hovered = is_mouse_inside(btn_create.rect, mx, my);
                 btn_refresh.is_hovered = is_mouse_inside(btn_refresh.rect, mx, my);
                 btn_friends.is_hovered = is_mouse_inside(btn_friends.rect, mx, my);
-                btn_quick_play.is_hovered = is_mouse_inside(btn_quick_play.rect, mx, my);
-                btn_settings.is_hovered = is_mouse_inside(btn_settings.rect, mx, my);
+                // btn_quick_play removed
+                // btn_settings removed
                 btn_profile.is_hovered = is_mouse_inside(btn_profile.rect, mx, my);
                 btn_leaderboard.is_hovered = is_mouse_inside(btn_leaderboard.rect, mx, my);
                 btn_logout.is_hovered = is_mouse_inside(btn_logout.rect, mx, my);
@@ -1660,11 +1671,9 @@ int main(int argc, char *argv[]) {
                 // Friends button
                 draw_button(rend, font_small, &btn_friends);
                 
-                // Quick Play button
-                draw_button(rend, font_small, &btn_quick_play);
+                // Quick Play removed
                 
-                // Settings button (bottom left)
-                draw_button(rend, font_small, &btn_settings);
+                // Settings button removed
                 
                 // Profile & Leaderboard buttons (top right)
                 draw_button(rend, font_small, &btn_profile);
@@ -1844,7 +1853,12 @@ int main(int argc, char *argv[]) {
             case SCREEN_PROFILE: {
                 Button back_btn;
                 back_btn.is_hovered = is_mouse_inside(back_btn.rect, mx, my);
-                render_profile_screen(rend, font_large, font_small, &my_profile, &back_btn);
+                // Determine title based on whether it's our profile or someone else's
+                char p_title[128] = "";
+                if (strcmp(my_profile.username, my_username) != 0 && strlen(my_profile.username) > 0) {
+                     snprintf(p_title, sizeof(p_title), "PROFILE: %s", my_profile.display_name);
+                }
+                render_profile_screen(rend, font_medium, font_small, &my_profile, &back_btn, p_title);
                 break;
             }
             
@@ -1855,16 +1869,7 @@ int main(int argc, char *argv[]) {
                 break;
             }
             
-            case SCREEN_SETTINGS: {
-                // Update hover states
-                btn_settings_apply.is_hovered = is_mouse_inside((SDL_Rect){760, 850, 200, 60}, mx, my);
-                Button back_btn_temp = {{980, 850, 200, 60}, "Back", 0};
-                back_btn_temp.is_hovered = is_mouse_inside(back_btn_temp.rect, mx, my);
-                
-                render_settings_screen(rend, font_large, font_small,
-                                      settings_active_tab, &back_btn_temp, &btn_settings_apply);
-                break;
-            }
+            // SCREEN_SETTINGS case removed
             
             case SCREEN_POST_MATCH: {
                 // Update hover states

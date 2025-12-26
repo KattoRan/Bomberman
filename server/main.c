@@ -221,11 +221,24 @@ void handle_client_packet(int socket_fd, ClientPacket *pkt) {
         case MSG_FRIEND_DECLINE:
             handle_friend_reject(socket_fd, pkt);
             break;
+        case MSG_FRIEND_REMOVE:
+            handle_friend_remove(socket_fd, pkt);
+            break;
         case MSG_FRIEND_LIST:
             handle_friend_list(socket_fd, pkt);
             break;
         case MSG_GET_PROFILE:
             handle_get_profile(socket_fd, pkt);
+            break;
+        case MSG_GET_LEADERBOARD:
+            handle_get_leaderboard(socket_fd, pkt);
+            break;
+        case MSG_FRIEND_INVITE:
+            handle_invite(socket_fd, pkt);
+            break;
+
+        case MSG_CHAT:
+            handle_chat(socket_fd, pkt);
             break;
     }
 }

@@ -73,7 +73,6 @@
 #define MSG_RECONNECT 34
 #define MSG_LOGIN_WITH_TOKEN 35
 #define MSG_SPECTATE 36
-#define MSG_UPDATE_PROFILE 37
 #define MSG_KICK_PLAYER 38
 #define MSG_SET_ROOM_PRIVATE 39
 
@@ -165,6 +164,19 @@ typedef struct {
     int game_mode;               // Game mode: 0=Classic, 1=Sudden Death, 2=Fog of War
 } Lobby;
 
+// Lightweight Lobby Summary for lists
+typedef struct {
+    int id;
+    char name[MAX_ROOM_NAME];
+    int num_players;
+    int max_players;
+    int spectator_count;
+    int game_mode;
+    int status;
+    int is_private;
+    int is_locked;
+} LobbySummary;
+
 // Game state
 typedef struct {
     int map[MAP_HEIGHT][MAP_WIDTH];
@@ -225,7 +237,7 @@ typedef struct {
             char session_token[64];
         } auth;
         struct {
-            Lobby lobbies[MAX_LOBBIES];
+            LobbySummary lobbies[MAX_LOBBIES];
             int count;
         } lobby_list;
         struct {
