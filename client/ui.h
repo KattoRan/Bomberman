@@ -49,7 +49,7 @@ void render_login_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Font 
                         const char *message);
 
 void render_lobby_list_screen(SDL_Renderer *renderer, TTF_Font *font,
-                              Lobby *lobbies, int lobby_count,
+                              LobbySummary *lobbies, int lobby_count,
                               Button *create_btn, Button *refresh_btn,
                               int selected_lobby);
 
@@ -68,7 +68,7 @@ void render_friends_screen(SDL_Renderer *renderer, TTF_Font *font,
 
 void render_profile_screen(SDL_Renderer *renderer, TTF_Font *font_medium, TTF_Font *font_small,
                            ProfileData *profile,
-                           Button *back_btn);
+                           Button *back_btn, const char *title_override);
 
 void render_leaderboard_screen(SDL_Renderer *renderer, TTF_Font *font_medium, TTF_Font *font_small,
                                LeaderboardEntry *entries, int entry_count,
@@ -78,8 +78,7 @@ void render_create_room_dialog(SDL_Renderer *renderer, TTF_Font *font,
                                InputField *room_name, InputField *access_code,
                                Button *create_btn, Button *cancel_btn);
 
-void render_settings_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Font *font_small,
-                            int active_tab, Button *back_btn, Button *apply_btn);
+// render_settings_screen removed
 
 void render_post_match_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Font *font_small,
                               int winner_id, int *elo_changes, int *kills, int duration_seconds,

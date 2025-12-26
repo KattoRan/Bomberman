@@ -86,7 +86,7 @@ int join_lobby_with_code(int lobby_id, const char *username, const char *access_
 int leave_lobby(int lobby_id, const char *username);
 int toggle_ready(int lobby_id, const char *username);
 int start_game(int lobby_id, const char *username);
-int get_lobby_list(Lobby *out_lobbies);
+int get_lobby_list(LobbySummary *out_lobbies);
 Lobby* find_lobby(int lobby_id);
 int find_user_lobby(const char *username);
 int join_spectator(int lobby_id, const char *username);
@@ -150,6 +150,7 @@ void handle_chat(int socket_fd, ClientPacket *pkt);
 void handle_friend_request(int socket_fd, ClientPacket *pkt);
 void handle_friend_accept(int socket_fd, ClientPacket *pkt);
 void handle_friend_reject(int socket_fd, ClientPacket *pkt);
+void handle_friend_remove(int socket_fd, ClientPacket *pkt);
 void handle_friend_list(int socket_fd, ClientPacket *pkt);
 void handle_get_profile(int socket_fd, ClientPacket *pkt);
 void handle_get_leaderboard(int socket_fd, ClientPacket *pkt);
