@@ -24,7 +24,6 @@ typedef enum {
     SCREEN_FRIENDS,
     SCREEN_PROFILE,
     SCREEN_LEADERBOARD,
-    SCREEN_SETTINGS,
     SCREEN_POST_MATCH
 } ScreenState;
 
@@ -70,7 +69,7 @@ Button btn_reg   = {{605, 560, 180, 60}, "Register", 0, BTN_PRIMARY};
 Button btn_create     = {{250, 620, 200, 60}, "Create Room", 0 , BTN_PRIMARY};
 Button btn_refresh    = {{460, 620, 200, 60}, "Refresh", 0 , BTN_PRIMARY};
 Button btn_friends    = {{670, 620, 200, 60}, "Friends", 0, BTN_PRIMARY};
-Button btn_quick_play = {{880, 620, 200, 60}, "Quick Play", 0, BTN_PRIMARY};
+// Button btn_quick_play removed
 Button btn_profile     = {{850, 20, 130, 50}, "Profile", 0, BTN_PRIMARY};
 Button btn_leaderboard = {{1000, 20, 80, 50}, "Top", 0, BTN_OUTLINE};
 
@@ -116,10 +115,7 @@ Button btn_send_friend_request = {{800, 620, 220, 60}, "Send Request", 0};
 int show_delete_confirm = 0;
 int delete_friend_index = -1;
 
-// Settings screen state
-int settings_active_tab = 0;  // 0=Graphics, 1=Controls, 2=Account
-Button btn_settings = {{40, 620, 200, 60}, "Settings", 0};
-Button btn_settings_apply = {{0, 0, 200, 60}, "Apply", 0};
+// Settings screen state removed
 
 // Post-match screen state  
 int post_match_winner_id = -1;
@@ -1037,15 +1033,16 @@ int main(int argc, char *argv[]) {
                             send_packet(MSG_GET_LEADERBOARD, 0);
                             current_screen = SCREEN_LEADERBOARD;
                         }
-                        if (is_mouse_inside(btn_quick_play.rect, mx, my)) {
-                            snprintf(notification_message, sizeof(notification_message),
-                                    "Quick Play matchmaking coming soon!");
-                            notification_time = SDL_GetTicks();
+                        if (is_mouse_inside(btn_profile.rect, mx, my)) {
+                            send_packet(MSG_GET_PROFILE, 0);
+                            current_screen = SCREEN_PROFILE;
                         }
-                        if (is_mouse_inside(btn_settings.rect, mx, my)) {
-                            current_screen = SCREEN_SETTINGS;
-                            settings_active_tab = 0; 
+                        if (is_mouse_inside(btn_leaderboard.rect, mx, my)) {
+                            send_packet(MSG_GET_LEADERBOARD, 0);
+                            current_screen = SCREEN_LEADERBOARD;
                         }
+                        // Quick Play removed
+                        // Settings removed
                         if (is_mouse_inside(btn_logout.rect, mx, my)) {
                             clear_session_token();
                             current_screen = SCREEN_LOGIN;
@@ -1545,39 +1542,7 @@ int main(int argc, char *argv[]) {
                     break;
                 }
                 
-                case SCREEN_SETTINGS: {
-                    if (e.type == SDL_MOUSEBUTTONDOWN) {
-                        int win_w, win_h;
-                        SDL_GetRendererOutputSize(rend, &win_w, &win_h);
-                        
-                        // Back button
-                        if (is_mouse_inside((SDL_Rect){980, 850, 200, 60}, mx, my)) {
-                            current_screen = SCREEN_LOBBY_LIST;
-                            send_packet(MSG_LIST_LOBBIES, 0);
-                        }
-                        
-                        // Tab switching (3 tabs)
-                        int tab_y = 140;
-                        int tab_width = 180;
-                        int tab_height = 50;
-                        int tab_spacing = 20;
-                        int tabs_start_x = (win_w - (tab_width * 3 + tab_spacing * 2)) / 2;
-                        
-                        for (int i = 0; i < 3; i++) {
-                            SDL_Rect tab_rect = {
-                                tabs_start_x + i * (tab_width + tab_spacing), 
-                                tab_y, 
-                                tab_width, 
-                                tab_height
-                            };
-                            if (is_mouse_inside(tab_rect, mx, my)) {
-                                settings_active_tab = i;
-                                break;
-                            }
-                        }
-                    }
-                    break;
-                }
+                // SCREEN_SETTINGS case removed
 
                 default:
                     break;
@@ -1638,8 +1603,8 @@ int main(int argc, char *argv[]) {
                 btn_create.is_hovered = is_mouse_inside(btn_create.rect, mx, my);
                 btn_refresh.is_hovered = is_mouse_inside(btn_refresh.rect, mx, my);
                 btn_friends.is_hovered = is_mouse_inside(btn_friends.rect, mx, my);
-                btn_quick_play.is_hovered = is_mouse_inside(btn_quick_play.rect, mx, my);
-                btn_settings.is_hovered = is_mouse_inside(btn_settings.rect, mx, my);
+                // btn_quick_play removed
+                // btn_settings removed
                 btn_profile.is_hovered = is_mouse_inside(btn_profile.rect, mx, my);
                 btn_leaderboard.is_hovered = is_mouse_inside(btn_leaderboard.rect, mx, my);
                 btn_logout.is_hovered = is_mouse_inside(btn_logout.rect, mx, my);
@@ -1660,11 +1625,9 @@ int main(int argc, char *argv[]) {
                 // Friends button
                 draw_button(rend, font_small, &btn_friends);
                 
-                // Quick Play button
-                draw_button(rend, font_small, &btn_quick_play);
+                // Quick Play removed
                 
-                // Settings button (bottom left)
-                draw_button(rend, font_small, &btn_settings);
+                // Settings button removed
                 
                 // Profile & Leaderboard buttons (top right)
                 draw_button(rend, font_small, &btn_profile);
@@ -1855,16 +1818,7 @@ int main(int argc, char *argv[]) {
                 break;
             }
             
-            case SCREEN_SETTINGS: {
-                // Update hover states
-                btn_settings_apply.is_hovered = is_mouse_inside((SDL_Rect){760, 850, 200, 60}, mx, my);
-                Button back_btn_temp = {{980, 850, 200, 60}, "Back", 0};
-                back_btn_temp.is_hovered = is_mouse_inside(back_btn_temp.rect, mx, my);
-                
-                render_settings_screen(rend, font_large, font_small,
-                                      settings_active_tab, &back_btn_temp, &btn_settings_apply);
-                break;
-            }
+            // SCREEN_SETTINGS case removed
             
             case SCREEN_POST_MATCH: {
                 // Update hover states

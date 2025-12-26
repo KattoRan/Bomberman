@@ -78,8 +78,7 @@ void render_create_room_dialog(SDL_Renderer *renderer, TTF_Font *font,
                                InputField *room_name, InputField *access_code,
                                Button *create_btn, Button *cancel_btn);
 
-void render_settings_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Font *font_small,
-                            int active_tab, Button *back_btn, Button *apply_btn);
+// render_settings_screen removed
 
 void render_post_match_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Font *font_small,
                               int winner_id, int *elo_changes, int *kills, int duration_seconds,
