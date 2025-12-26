@@ -585,6 +585,8 @@ void process_server_packet(ServerPacket *pkt) {
             break;
         }
 
+
+
         case MSG_INVITE_RECEIVED:
             {
                 current_invite.lobby_id = pkt->payload.invite.lobby_id;

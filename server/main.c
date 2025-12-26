@@ -227,6 +227,9 @@ void handle_client_packet(int socket_fd, ClientPacket *pkt) {
         case MSG_GET_PROFILE:
             handle_get_profile(socket_fd, pkt);
             break;
+        case MSG_GET_LEADERBOARD:
+            handle_get_leaderboard(socket_fd, pkt);
+            break;
     }
 }
 
