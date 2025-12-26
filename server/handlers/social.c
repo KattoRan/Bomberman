@@ -118,6 +118,50 @@ void handle_friend_reject(int socket_fd, ClientPacket *pkt) {
     }
 }
 
+
+void handle_friend_remove(int socket_fd, ClientPacket *pkt) {
+    ClientInfo *client = find_client_by_socket(socket_fd);
+    if (!client || !client->is_authenticated) return;
+
+    int result = friend_remove(client->user_id, pkt->target_user_id);
+    
+    ServerPacket response;
+    memset(&response, 0, sizeof(ServerPacket));
+    response.type = MSG_NOTIFICATION;
+    response.code = result;
+    
+    if (result == 0) strcpy(response.message, "Friend removed");
+    else strcpy(response.message, "Failed to remove friend");
+    
+    send_response(socket_fd, &response);
+    
+    // Refresh friend list
+    if (result == 0) {
+        ServerPacket list_resp;
+        memset(&list_resp, 0, sizeof(ServerPacket));
+        list_resp.type = MSG_FRIEND_LIST_RESPONSE;
+        
+        int friend_count = friend_get_list(client->user_id, list_resp.payload.friend_list.friends, 50);
+        list_resp.payload.friend_list.count = friend_count;
+        
+        FriendInfo pending[50];
+        int pending_count = friend_get_pending_requests(client->user_id, pending, 50);
+        
+        FriendInfo sent[50];
+        int sent_count = friend_get_sent_requests(client->user_id, sent, 50);
+        
+        if (friend_count + pending_count + sent_count <= 50) {
+            memcpy(&list_resp.payload.friend_list.friends[friend_count], 
+                   pending, sizeof(FriendInfo) * pending_count);
+             memcpy(&list_resp.payload.friend_list.friends[friend_count + pending_count],
+                   sent, sizeof(FriendInfo) * sent_count);
+            list_resp.payload.friend_list.count += pending_count + sent_count;
+        }
+        list_resp.code = pending_count | (sent_count << 8);
+        send_response(socket_fd, &list_resp);
+    }
+}
+
 void handle_friend_list(int socket_fd, ClientPacket *pkt) {
     (void)pkt;
     ClientInfo *client = find_client_by_socket(socket_fd);

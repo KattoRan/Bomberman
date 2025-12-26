@@ -150,6 +150,7 @@ void handle_chat(int socket_fd, ClientPacket *pkt);
 void handle_friend_request(int socket_fd, ClientPacket *pkt);
 void handle_friend_accept(int socket_fd, ClientPacket *pkt);
 void handle_friend_reject(int socket_fd, ClientPacket *pkt);
+void handle_friend_remove(int socket_fd, ClientPacket *pkt);
 void handle_friend_list(int socket_fd, ClientPacket *pkt);
 void handle_get_profile(int socket_fd, ClientPacket *pkt);
 void handle_get_leaderboard(int socket_fd, ClientPacket *pkt);
