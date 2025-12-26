@@ -287,14 +287,14 @@ void render_friends_screen(SDL_Renderer *renderer, TTF_Font *font,
 // Enhanced profile screen with card-based stats layout
 void render_profile_screen(SDL_Renderer *renderer, TTF_Font *font_medium, TTF_Font *font_small,
                            ProfileData *profile,
-                           Button *back_btn) {
+                           Button *back_btn, const char *title_override) {
     int win_w, win_h;
     SDL_GetRendererOutputSize(renderer, &win_w, &win_h);
     
     draw_background_grid(renderer, win_w, win_h);
     
     // Title with shadow
-    const char *title_text = "YOUR PROFILE";
+    const char *title_text = (title_override && strlen(title_override) > 0) ? title_override : "YOUR PROFILE";
     SDL_Surface *title_shadow = TTF_RenderText_Blended(font_medium, title_text, (SDL_Color){0, 0, 0, 120});
     if (title_shadow) {
         SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, title_shadow);

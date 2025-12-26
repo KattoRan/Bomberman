@@ -406,7 +406,15 @@ void process_server_packet(ServerPacket *pkt) {
                 }
             }
             
-            // printf("[CLIENT] My player_id: %d, Host_id: %d\n", my_player_id, current_lobby.host_id);
+            // --- FIX: CLEAR CHAT HISTORY ON NEW ROOM ---
+            // If we are entering a new lobby (not just an update for the same one), clear chat
+            static int chat_last_lobby_id = -2;
+            if (current_lobby.id != chat_last_lobby_id) {
+                chat_count = 0;
+                memset(chat_history, 0, sizeof(chat_history));
+                chat_last_lobby_id = current_lobby.id;
+                // printf("[CLIENT] Chat history cleared for new room %d\n", current_lobby.id);
+            }
             
             if (current_lobby.status == LOBBY_PLAYING) {
                 if (current_screen != SCREEN_GAME) {
@@ -1053,27 +1061,37 @@ int main(int argc, char *argv[]) {
                             inp_pass.text[0] = '\0';
                         }
                         
-                        // Lobby click detection
-                        int y = 120;
-                        int list_width = 640;
-                        int card_height = 80;
-                        int start_x = 240;
+                        // Lobby click detection - Updated for new button layout
+                        int y = 120; // Fixed from top
+                        // FIXED lobby cards for 1120x720 (Must match ui_screens.c)
+                        int list_width = 740;  
+                        int card_height = 80;  
+                        int win_w;
+                        SDL_GetRendererOutputSize(rend, &win_w, NULL);
+                        int start_x = (win_w - list_width) / 2;
                         
                         for (int i = 0; i < lobby_count; i++) {
-                            SDL_Rect r = {start_x, y, list_width, card_height};
-                            if (is_mouse_inside(r, mx, my)) {
-                                if (lobby_list[i].is_private) {
-                                    selected_private_lobby_id = lobby_list[i].id;
-                                    show_join_code_dialog = 1;
-                                    inp_join_code.text[0] = '\0';
-                                    inp_join_code.is_active = 1;
+                            // Calculate button positions relative to card (must match ui_screens.c)
+                            int btn_y = y + 20;
+                            int btn_h = 40;
+                            
+                            // Join Button Rect
+                            SDL_Rect join_rect = {start_x + list_width - 200, btn_y, 90, btn_h};
+                            
+                            // Spectate Button Rect
+                            SDL_Rect spectate_rect = {start_x + list_width - 100, btn_y, 90, btn_h};
+
+                            // JOIN CLICK
+                            if (is_mouse_inside(join_rect, mx, my)) {
+                                if (lobby_list[i].status == LOBBY_PLAYING) {
+                                    // Disabled - do nothing
                                 } else {
-                                    if (lobby_list[i].status == LOBBY_PLAYING) {
-                                        ClientPacket pkt;
-                                        memset(&pkt, 0, sizeof(pkt));
-                                        pkt.type = MSG_SPECTATE;
-                                        pkt.lobby_id = lobby_list[i].id;
-                                        send(sock, &pkt, sizeof(pkt), 0);
+                                    // Join Logic
+                                    if (lobby_list[i].is_private) {
+                                        selected_private_lobby_id = lobby_list[i].id;
+                                        show_join_code_dialog = 1;
+                                        inp_join_code.text[0] = '\0';
+                                        inp_join_code.is_active = 1;
                                     } else {
                                         ClientPacket pkt;
                                         memset(&pkt, 0, sizeof(pkt));
@@ -1083,10 +1101,30 @@ int main(int argc, char *argv[]) {
                                         send(sock, &pkt, sizeof(pkt), 0);
                                     }
                                 }
+                                selected_lobby_idx = i; // Optionally select it
+                                break; 
+                            }
+                            
+                            // SPECTATE CLICK
+                            if (is_mouse_inside(spectate_rect, mx, my)) {
+                                ClientPacket pkt;
+                                memset(&pkt, 0, sizeof(pkt));
+                                pkt.type = MSG_SPECTATE;
+                                pkt.lobby_id = lobby_list[i].id;
+                                send(sock, &pkt, sizeof(pkt), 0);
+                                
                                 selected_lobby_idx = i;
                                 break;
                             }
-                            y += 85; 
+                            
+                            // Keep card selection if clicking elsewhere on card?
+                            // Optional: allows selecting without joining
+                            SDL_Rect card_rect = {start_x, y, list_width, card_height};
+                            if (is_mouse_inside(card_rect, mx, my)) {
+                                selected_lobby_idx = i;
+                            }
+                            
+                            y += card_height + 10; 
                         }
                     }
                     break;
@@ -1316,8 +1354,13 @@ int main(int argc, char *argv[]) {
                                 send_packet(MSG_LIST_LOBBIES, 0);
                                 lobby_error_message[0] = '\0';
                             } else {
-                                // Player: Back to Room - Stay in lobby (Waiting state)
-                                current_screen = SCREEN_LOBBY_ROOM;
+                                // Player: Back to Room - Actually we want to "Return to Lobby LIST" 
+                                // because the user is "stuck" otherwise.
+                                // ORIGINAL BUG: "Return to Lobby" kept user in room (SCREEN_LOBBY_ROOM). 
+                                // FIX: Send LEAVE_LOBBY and go to SCREEN_LOBBY_LIST
+                                send_packet(MSG_LEAVE_LOBBY, 0);
+                                current_screen = SCREEN_LOBBY_LIST;
+                                send_packet(MSG_LIST_LOBBIES, 0);
                             }
                             post_match_shown = 0;
                         }
@@ -1809,7 +1852,12 @@ int main(int argc, char *argv[]) {
             case SCREEN_PROFILE: {
                 Button back_btn;
                 back_btn.is_hovered = is_mouse_inside(back_btn.rect, mx, my);
-                render_profile_screen(rend, font_large, font_small, &my_profile, &back_btn);
+                // Determine title based on whether it's our profile or someone else's
+                const char *p_title = NULL;
+                if (strcmp(my_profile.username, my_username) != 0 && strlen(my_profile.username) > 0) {
+                     p_title = "FRIEND PROFILE"; 
+                }
+                render_profile_screen(rend, font_medium, font_small, &my_profile, &back_btn, p_title);
                 break;
             }
             

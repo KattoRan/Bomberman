@@ -68,7 +68,7 @@ void render_friends_screen(SDL_Renderer *renderer, TTF_Font *font,
 
 void render_profile_screen(SDL_Renderer *renderer, TTF_Font *font_medium, TTF_Font *font_small,
                            ProfileData *profile,
-                           Button *back_btn);
+                           Button *back_btn, const char *title_override);
 
 void render_leaderboard_screen(SDL_Renderer *renderer, TTF_Font *font_medium, TTF_Font *font_small,
                                LeaderboardEntry *entries, int entry_count,

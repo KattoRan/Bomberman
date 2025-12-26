@@ -99,6 +99,24 @@ void handle_leave_lobby(int socket_fd, ClientPacket *pkt) {
 
     if (client->lobby_id != -1) {
         int old_lid = client->lobby_id;
+        
+        // Try to leave as spectator first
+        printf("[DEBUG] handle_leave_lobby: Trying to remove spectator %s from lobby %d\n", client->username, old_lid);
+        if (leave_spectator(old_lid, client->username) == 0) {
+             printf("[DEBUG] handle_leave_lobby: Successfully removed spectator %s\n", client->username);
+             client->lobby_id = -1;
+             client->player_id_in_game = -1;
+             broadcast_lobby_update(old_lid);
+             broadcast_lobby_list();
+             
+             ServerPacket response;
+             memset(&response, 0, sizeof(ServerPacket));
+             response.type = MSG_LOBBY_LIST;
+             response.payload.lobby_list.count = get_lobby_list(response.payload.lobby_list.lobbies);
+             send_response(socket_fd, &response);
+             return;
+        }
+
         leave_lobby(old_lid, client->username);
         client->lobby_id = -1;
         broadcast_lobby_update(old_lid);

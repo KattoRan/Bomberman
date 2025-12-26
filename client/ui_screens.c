@@ -596,9 +596,9 @@ void render_lobby_list_screen(SDL_Renderer *renderer, TTF_Font *font,
     
     // FIXED lobby cards for 1120x720
     int y = 120;  // Fixed from top
-    int list_width = 640;  // Fixed width
+    int list_width = 740;  // Widen card to fit buttons
     int card_height = 80;  // Fixed height
-    int start_x = 240;  // Centered: (1120-640)/2
+    int start_x = (win_w - list_width) / 2;  // Centered
 
     for (int i = 0; i < lobby_count; i++) {
         SDL_Rect lobby_rect = {start_x, y, list_width, card_height};
@@ -648,7 +648,8 @@ void render_lobby_list_screen(SDL_Renderer *renderer, TTF_Font *font,
             char player_text[32];
             snprintf(player_text, sizeof(player_text), "Ply:%d | Spc:%d", 
                      lobbies[i].num_players, lobbies[i].spectator_count);
-            SDL_Rect player_badge = {start_x + list_width - 120, y + 20, 100, 35};
+            // Move badge left to make room for buttons
+            SDL_Rect player_badge = {start_x + list_width - 320, y + 22, 110, 35};
             
             SDL_Color badge_bg = lobbies[i].num_players >= 4 ? CLR_DANGER : 
                                lobbies[i].num_players >= 2 ? CLR_WARNING : CLR_SUCCESS;
@@ -685,6 +686,49 @@ void render_lobby_list_screen(SDL_Renderer *renderer, TTF_Font *font,
                 SDL_DestroyTexture(tex);
                 SDL_FreeSurface(info_surf);
             }
+            
+            // --- ACTION BUTTONS ---
+            int btn_y = y + 20;
+            int btn_h = 40;
+            
+            // JOIN Button
+            Button btn_join = {
+                .rect = {start_x + list_width - 200, btn_y, 90, btn_h},
+                .type = BTN_PRIMARY
+            };
+            strcpy(btn_join.text, "Join");
+            
+            // If playing, render as "disabled" (Gray)
+            if (lobbies[i].status == LOBBY_PLAYING) {
+                // Manually draw disabled state
+                draw_rounded_rect(renderer, btn_join.rect, CLR_GRAY, UI_CORNER_RADIUS);
+                draw_rounded_border(renderer, btn_join.rect, CLR_GRAY_LIGHT, UI_CORNER_RADIUS, 1);
+                draw_button_text(renderer, font, &btn_join, CLR_GRAY_LIGHT);
+            } else {
+                // Normal green join
+                // Temporarily override primary colors for a "Green/Success" look? 
+                // Or just use Primary style. Let's use Primary (Blue/Purple) but maybe customize 
+                // if we want distinct colors. For now, Primary is fine, or customize manually.
+                // Let's use custom "Success" color for Join
+                SDL_Color green_top = {34, 197, 94, 255};
+                SDL_Color green_bot = {21, 128, 61, 255};
+                
+                // Shadow
+                draw_layered_shadow(renderer, btn_join.rect, UI_CORNER_RADIUS, 2);
+                draw_vertical_gradient(renderer, btn_join.rect, green_top, green_bot);
+                draw_rounded_border(renderer, btn_join.rect, green_bot, UI_CORNER_RADIUS, 1);
+                draw_button_text(renderer, font, &btn_join, CLR_WHITE);
+            }
+
+            // SPECTATE Button
+            Button btn_spectate = {
+                .rect = {start_x + list_width - 100, btn_y, 90, btn_h},
+                .type = BTN_OUTLINE // Use outline or primary?
+            };
+            strcpy(btn_spectate.text, "Watch");
+            
+            // Blue/Primary style
+            draw_button_primary(renderer, font, &btn_spectate);
         }
         y += card_height + 10;
     }
