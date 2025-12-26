@@ -8,7 +8,26 @@
 #include <sys/time.h>
 #include <time.h>
 #include "../common/protocol.h"
+#include <stdarg.h>
 #include "server.h"
+
+// --- Logging Helper ---
+void log_event(const char *category, const char *format, ...) {
+    time_t now;
+    time(&now);
+    char buf[20]; // YYYY-MM-DD HH:MM:SS
+    strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", localtime(&now));
+    
+    printf("[%s] [%s] ", buf, category);
+    
+    va_list args;
+    va_start(args, format);
+    vprintf(format, args);
+    va_end(args);
+    
+    printf("\n");
+    fflush(stdout); // Ensure immediate output
+}
 
 // --- Structures & Globals ---
 typedef struct {
@@ -145,7 +164,7 @@ void forfeit_player_from_game(int lobby_id, const char *username) {
 
     if (p_idx != -1) {
         gs->players[p_idx].is_alive = 0;
-        printf("[GAME] %s forfeited in lobby %d\n", username, lobby_id);
+        log_event("GAME", "%s forfeited in lobby %d", username, lobby_id);
     }
 
     // Check if game should end after forfeit
@@ -266,7 +285,7 @@ void handle_client_packet(int socket_fd, ClientPacket *pkt) {
 
                         strcpy(response.message, "Registration successful - welcome!");
                         
-                        printf("[AUTH] Registration + Auto-login: %s (ID: %d, ELO: %d)\n", 
+                        log_event("AUTH", "Registration + Auto-login: %s (ID: %d, ELO: %d)", 
                                user.username, user.id, user.elo_rating);
                     } else {
                         strcpy(response.message, "Registration successful");
@@ -315,7 +334,7 @@ void handle_client_packet(int socket_fd, ClientPacket *pkt) {
                     
                     strcpy(response.message, "Login successful");
                     
-                    printf("[AUTH] Login: %s (ID: %d, ELO: %d)\n", 
+                    log_event("AUTH", "Login: %s (ID: %d, ELO: %d)", 
                            user.username, user.id, user.elo_rating);
                            
                     // SMART REJOIN: Check if user is already in an active game
@@ -326,7 +345,7 @@ void handle_client_packet(int socket_fd, ClientPacket *pkt) {
                              for(int p=0; p < gs->num_players; p++) {
                                  if (strcmp(gs->players[p].username, user.username) == 0) {
                                      // Found active game! Reconnect logic
-                                     printf("[RECONNECT] User %s found in active lobby %d\n", user.username, i);
+                                     log_event("RECONNECT", "User %s found in active lobby %d", user.username, i);
                                      
                                      client->lobby_id = i;
                                      client->player_id_in_game = p;
@@ -376,7 +395,7 @@ void handle_client_packet(int socket_fd, ClientPacket *pkt) {
                     strncpy(response.payload.auth.session_token, user.session_token, 63);
                     strcpy(response.message, "Auto-login successful");
                     
-                    printf("[AUTH] Auto-Login: %s (ID: %d)\n", user.username, user.id);
+                    log_event("AUTH", "Auto-Login: %s (ID: %d)", user.username, user.id);
                     
                     // SMART REJOIN: Check if user is already in an active game
                     for (int i = 0; i < MAX_LOBBIES; i++) {
@@ -386,7 +405,7 @@ void handle_client_packet(int socket_fd, ClientPacket *pkt) {
                              for(int p=0; p < gs->num_players; p++) {
                                  if (strcmp(gs->players[p].username, user.username) == 0) {
                                      // Found active game! Reconnect logic
-                                     printf("[RECONNECT] User %s found in active lobby %d\n", user.username, i);
+                                     log_event("RECONNECT", "User %s found in active lobby %d", user.username, i);
                                      
                                      client->lobby_id = i;
                                      client->player_id_in_game = p;
@@ -429,7 +448,7 @@ void handle_client_packet(int socket_fd, ClientPacket *pkt) {
                 send_response(socket_fd, &response);
                 
                 if (pkt->is_private) {
-                    printf("[LOBBY] Private room created with code: %s\n", pkt->access_code);
+                    log_event("LOBBY", "Private room created with code: %s", pkt->access_code);
                 }
             }
             break;
@@ -651,7 +670,7 @@ void handle_client_packet(int socket_fd, ClientPacket *pkt) {
                     response.type = MSG_NOTIFICATION;
                     snprintf(response.message, sizeof(response.message), "Invitation sent to %s", pkt->target_display_name);
                     send_response(socket_fd, &response);
-                    printf("[INVITE] %s invited %s to Room %d\n", client->username, pkt->target_display_name, lobby->id);
+                    log_event("INVITE", "%s invited %s to Room %d", client->username, pkt->target_display_name, lobby->id);
                 }
             } else {
                 response.type = MSG_NOTIFICATION;
@@ -862,7 +881,7 @@ void handle_client_packet(int socket_fd, ClientPacket *pkt) {
                 }
             }
             
-            printf("[CHAT] Lobby %d - %s: %s\n", client->lobby_id, client->username, pkt->chat_message);
+            log_event("CHAT", "Lobby %d - %s: %s", client->lobby_id, client->username, pkt->chat_message);
             break;
         }
     }
@@ -933,7 +952,7 @@ int main() {
                 cl->player_id_in_game = -1;
                 cl->is_authenticated = 0;
                 cl->username[0] = '\0';
-                printf("[CONNECTION] Client %d connected\n", new_sock);
+                log_event("CONNECTION", "Client %d connected", new_sock);
             }
         }
 
@@ -945,7 +964,7 @@ int main() {
                 int n = recv(sd, &pkt, sizeof(pkt), 0);
                 if (n <= 0) {
                     // Client disconnected
-                    printf("[DISCONNECT] Client %d (%s)\n", sd, 
+                    log_event("DISCONNECT", "Client %d (%s)", sd, 
                            clients[i].username[0] ? clients[i].username : "unknown");
 
                     // CHECK: Is this user in an active game?
@@ -1014,8 +1033,7 @@ int main() {
                         }
                         
                         if (!already_calculated) {
-                            printf("[GAME] Lobby %d ended. Winner: %d\n", 
-                                   i, gs->winner_id);
+                            log_event("GAME", "Lobby %d ended. Winner: %d", i, gs->winner_id);
                             
                             // Prepare data for stats recording
                             int player_ids[MAX_CLIENTS];
@@ -1038,7 +1056,7 @@ int main() {
                                 placements[p] = (p == gs->winner_id) ? 1 : 2;
                                 kills[p] = gs->kills[p];
                                 
-                                printf("[ELO] Player %s (user_id: %d) -> Placement: %d, Kills: %d\n", 
+                                log_event("ELO", "Player %s (user_id: %d) -> Placement: %d, Kills: %d", 
                                        gs->players[p].username, player_ids[p], placements[p], kills[p]);
                             }
                             
@@ -1064,7 +1082,7 @@ int main() {
                                                              duration_seconds);
                             
                             if (match_id >= 0) {
-                                printf("[STATS] Match recorded with ID: %d (Duration: %d seconds)\n", 
+                                log_event("STATS", "Match recorded with ID: %d (Duration: %d seconds)", 
                                        match_id, duration_seconds);
                             } else {
                                 printf("[STATS] ERROR: Failed to record match\n");

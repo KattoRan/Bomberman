@@ -172,7 +172,7 @@ void determine_session_path(int argc, char *argv[]) {
             const char *home = getenv("HOME");
             if (!home) home = ".";
             snprintf(session_file_path, sizeof(session_file_path), "%s/.bomberman_session_%s", home, argv[i+1]);
-            printf("[SESSION] Using profile path: %s\n", session_file_path);
+            // printf("[SESSION] Using profile path: %s\n", session_file_path);
             return;
         }
     }
@@ -192,7 +192,7 @@ void determine_session_path(int argc, char *argv[]) {
         const char *home = getenv("HOME");
         if (!home) home = ".";
         snprintf(session_file_path, sizeof(session_file_path), "%s/.bomberman_session%s", home, safe_tty);
-        printf("[SESSION] Auto-detected TTY path: %s\n", session_file_path);
+        // printf("[SESSION] Auto-detected TTY path: %s\n", session_file_path);
         return;
     }
 
@@ -200,7 +200,7 @@ void determine_session_path(int argc, char *argv[]) {
     const char *home = getenv("HOME");
     if (!home) home = ".";
     snprintf(session_file_path, sizeof(session_file_path), "%s/.bomberman_session_default", home);
-    printf("[SESSION] Using fallback path: %s\n", session_file_path);
+    // printf("[SESSION] Using fallback path: %s\n", session_file_path);
 }
 
 void save_session_token(const char *token) {
@@ -229,7 +229,7 @@ int load_session_token(char *buffer) {
 
 void clear_session_token() {
     unlink(session_file_path);
-    printf("[SESSION] Token cleared.\n");
+    // printf("[SESSION] Token cleared.\n");
 }
 
 // --- Helper Functions ---
@@ -350,7 +350,7 @@ void process_server_packet(ServerPacket *pkt) {
                 snprintf(notification_message, sizeof(notification_message), "Welcome, %s!", my_username);
                 notification_time = SDL_GetTicks();
                 
-                printf("[CLIENT] Authenticated as: %s\n", my_username);
+                // printf("[CLIENT] Authenticated as: %s\n", my_username);
             } else {
                 if (current_screen == SCREEN_LOGIN) { 
                     // Only show errors if we are actually ON the login screen
@@ -410,7 +410,7 @@ void process_server_packet(ServerPacket *pkt) {
                 }
             }
             
-            printf("[CLIENT] My player_id: %d, Host_id: %d\n", my_player_id, current_lobby.host_id);
+            // printf("[CLIENT] My player_id: %d, Host_id: %d\n", my_player_id, current_lobby.host_id);
             
             if (current_lobby.status == LOBBY_PLAYING) {
                 if (current_screen != SCREEN_GAME) {
@@ -464,16 +464,16 @@ void process_server_packet(ServerPacket *pkt) {
                     // Populate post-match data with REAL values
                     post_match_winner_id = current_state.winner_id;
                     post_match_duration = current_state.match_duration_seconds;
-                    printf("[CLIENT] Post-match data from server:\n");
+                    // printf("[CLIENT] Post-match data from server:\n");
                     for (int i = 0; i < current_state.num_players && i < MAX_CLIENTS; i++) {
                         post_match_elo_changes[i] = current_state.elo_changes[i];  // Real ELO changes!
                         post_match_kills[i] = current_state.kills[i];  // Real kills!
-                        printf("[CLIENT]   Player %d: ELO change = %d, Kills = %d\n", 
-                               i, post_match_elo_changes[i], post_match_kills[i]);
+                        // printf("[CLIENT]   Player %d: ELO change = %d, Kills = %d\n", 
+                        //       i, post_match_elo_changes[i], post_match_kills[i]);
                     }
-                    printf("[CLIENT]   Match duration: %d seconds\n", post_match_duration);
+                    // printf("[CLIENT]   Match duration: %d seconds\n", post_match_duration);
                     
-                    printf("[CLIENT] Switched to post-match screen\n");
+                    // printf("[CLIENT] Switched to post-match screen\n");
                 }
             }
             break;
@@ -585,7 +585,7 @@ void process_server_packet(ServerPacket *pkt) {
                 msg->is_current_user = (strcmp(msg->sender, my_username) == 0) ? 1 : 0;
             }
             
-            printf("[CLIENT] Chat - %s: %s\n", pkt->payload.chat_msg.sender_username, pkt->payload.chat_msg.message);
+            // printf("[CLIENT] Chat - %s: %s\n", pkt->payload.chat_msg.sender_username, pkt->payload.chat_msg.message);
             break;
         }
 
@@ -645,7 +645,7 @@ int main(int argc, char *argv[]) {
     // Auto-Login Attempt
     char saved_token[64];
     if (load_session_token(saved_token)) {
-        printf("[CLIENT] Found saved session token. Attempting auto-login...\n");
+        // printf("[CLIENT] Found saved session token. Attempting auto-login...\n");
         ClientPacket pkt;
         memset(&pkt, 0, sizeof(pkt));
         pkt.type = MSG_LOGIN_WITH_TOKEN;
