@@ -317,6 +317,36 @@ void handle_client_packet(int socket_fd, ClientPacket *pkt) {
                     
                     printf("[AUTH] Login: %s (ID: %d, ELO: %d)\n", 
                            user.username, user.id, user.elo_rating);
+                           
+                    // SMART REJOIN: Check if user is already in an active game
+                    for (int i = 0; i < MAX_LOBBIES; i++) {
+                         Lobby *lb = find_lobby(i);
+                         if (lb && lb->status == LOBBY_PLAYING) {
+                             GameState *gs = &active_games[i];
+                             for(int p=0; p < gs->num_players; p++) {
+                                 if (strcmp(gs->players[p].username, user.username) == 0) {
+                                     // Found active game! Reconnect logic
+                                     printf("[RECONNECT] User %s found in active lobby %d\n", user.username, i);
+                                     
+                                     client->lobby_id = i;
+                                     client->player_id_in_game = p;
+                                     
+                                     // Send Lobby Update first to set context
+                                     ServerPacket lobby_pkt;
+                                     memset(&lobby_pkt, 0, sizeof(ServerPacket));
+                                     lobby_pkt.type = MSG_LOBBY_UPDATE; 
+                                     lobby_pkt.code = 0;
+                                     lobby_pkt.payload.lobby = *lb;
+                                     send_response(client->socket_fd, &lobby_pkt);
+                                     
+                                     // Then Game State will be sent naturally by broadcast_game_state or next tick
+                                     // But let's send immediately to be sure
+                                     broadcast_game_state(i);
+                                     break;
+                                 }
+                             }
+                         }
+                    }
                 } else {
                     strcpy(response.message, "Invalid credentials");
                 }

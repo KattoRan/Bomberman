@@ -880,107 +880,13 @@ int main(int argc, char *argv[]) {
                     break;
                     
                 case SCREEN_LOBBY_LIST:
-                    if (e.type == SDL_MOUSEBUTTONDOWN) {
-                        if (is_mouse_inside(btn_create.rect, mx, my)) {
-                            // Show create room dialog
-                            show_create_room_dialog = 1;
-                            snprintf(inp_room_name.text, sizeof(inp_room_name.text), "Room %d", lobby_count + 1);
-                            inp_access_code.text[0] = '\0';
-                            inp_room_name.is_active = 1;
-                            inp_access_code.is_active = 0;
-                        }
-                        if (is_mouse_inside(btn_refresh.rect, mx, my)) {
-                            send_packet(MSG_LIST_LOBBIES, 0);
-                        }
-                        if (is_mouse_inside(btn_friends.rect, mx, my)) {
-                            // Request friends list from server
-                            send_packet(MSG_FRIEND_LIST, 0);
-                            current_screen = SCREEN_FRIENDS;
-                        }
-                        if (is_mouse_inside(btn_profile.rect, mx, my)) {
-                            // Request own profile
-                            send_packet(MSG_GET_PROFILE, 0);
-                            current_screen = SCREEN_PROFILE;
-                        }
-                        if (is_mouse_inside(btn_leaderboard.rect, mx, my)) {
-                            // Request leaderboard
-                            send_packet(MSG_GET_LEADERBOARD, 0);
-                            current_screen = SCREEN_LEADERBOARD;
-                        }
-                        if (is_mouse_inside(btn_quick_play.rect, mx, my)) {
-                            // Quick Play - show notification (backend not implemented)
-                            snprintf(notification_message, sizeof(notification_message),
-                                    "Quick Play matchmaking coming soon!");
-                            notification_time = SDL_GetTicks();
-                        }
-                        if (is_mouse_inside(btn_settings.rect, mx, my)) {
-                            // Open settings screen
-                            current_screen = SCREEN_SETTINGS;
-                            settings_active_tab = 0;  // Default to Graphics tab
-                        }
-                        if (is_mouse_inside(btn_logout.rect, mx, my)) {
-                            // Logout
-                            clear_session_token();
-                            current_screen = SCREEN_LOGIN;
-                            status_message[0] = '\0';
-                            
-                            // Clear login inputs
-                            inp_user.text[0] = '\0';
-                            inp_pass.text[0] = '\0';
-                            
-                            // Close socket or send disconnect? 
-                            // For simplicity, just clearing token and going to login screen.
-                            // Main loop will handle new login.
-                        }
-                        
-                        // Lobby click detection - MUST MATCH ui_screens.c coordinates
-                        int y = 120;  // Fixed from top
-                        int list_width = 640;  // Fixed width
-                        int card_height = 80;  // Fixed height
-                        int start_x = 240;  // Centered: (1120-640)/2
-                        
-                        for (int i = 0; i < lobby_count; i++) {
-                            SDL_Rect r = {start_x, y, list_width, card_height};
-                            if (is_mouse_inside(r, mx, my)) {
-                                // Check if private room
-                                if (lobby_list[i].is_private) {
-                                    // Show access code prompt
-                                    selected_private_lobby_id = lobby_list[i].id;
-                                    show_join_code_dialog = 1;
-                                    inp_join_code.text[0] = '\0';
-                                    inp_join_code.is_active = 1;
-                                } else {
-                                    // Join public room directly
-                                    // Join public room or Spectate
-                                    if (lobby_list[i].status == LOBBY_PLAYING) {
-                                        ClientPacket pkt;
-                                        memset(&pkt, 0, sizeof(pkt));
-                                        pkt.type = MSG_SPECTATE;
-                                        pkt.lobby_id = lobby_list[i].id;
-                                        send(sock, &pkt, sizeof(pkt), 0);
-                                    } else {
-                                        ClientPacket pkt;
-                                        memset(&pkt, 0, sizeof(pkt));
-                                        pkt.type = MSG_JOIN_LOBBY;
-                                        pkt.lobby_id = lobby_list[i].id;
-                                        pkt.access_code[0] = '\0';
-                                        send(sock, &pkt, sizeof(pkt), 0);
-                                    }
-                                }
-                                selected_lobby_idx = i;
-                                break;
-                            }
-                            y += 85;  // Card spacing (75 + 10)
-                        }
-                    }
-                    
-                    // Dialog event handling
+                    // --- 1. DIALOG HANDLING (Priority) ---
                     if (show_create_room_dialog) {
                         if (e.type == SDL_MOUSEBUTTONDOWN) {
                             inp_room_name.is_active = is_mouse_inside(inp_room_name.rect, mx, my);
                             inp_access_code.is_active = is_mouse_inside(inp_access_code.rect, mx, my);
                             
-                            // Game mode buttons - calculate positions from render_create_room_dialog
+                            // Game mode buttons
                             int win_w, win_h;
                             SDL_GetRendererOutputSize(rend, &win_w, &win_h);
                             int dialog_w = 700;
@@ -991,40 +897,35 @@ int main(int argc, char *argv[]) {
                             int btn_width = 180;
                             int btn_spacing = 20;
                             
-                            // Check each game mode button
                             for (int i = 0; i < 3; i++) {
                                 int btn_x = dialog_x + 75 + i * (btn_width + btn_spacing);
                                 SDL_Rect mode_btn = {btn_x, mode_y, btn_width, 50};
                                 if (is_mouse_inside(mode_btn, mx, my)) {
-                                    selected_game_mode = i;  // 0=Classic, 1=Sudden Death, 2=Fog of War
+                                    selected_game_mode = i;
                                     printf("[CLIENT] Selected game mode: %d\n", selected_game_mode);
                                     break;
                                 }
                             }
                             
-                            // Random button - generates 6-digit code
+                            // Random button
                             SDL_Rect btn_random = {inp_access_code.rect.x + inp_access_code.rect.w + 10, 
                                                   inp_access_code.rect.y, 80, inp_access_code.rect.h};
                             if (is_mouse_inside(btn_random, mx, my)) {
-                                // Generate random 6-digit code (100000-999999)
                                 int random_code = 100000 + (rand() % 900000);
                                 snprintf(inp_access_code.text, sizeof(inp_access_code.text), "%d", random_code);
                             }
                             
                             if (is_mouse_inside(btn_create_confirm.rect, mx, my)) {
-                                // Validate access code if provided
                                 int code_len = strlen(inp_access_code.text);
                                 int is_valid = 1;
                                 char error_msg[128] = "";
                                 
                                 if (code_len > 0) {
-                                    // Check if exactly 6 digits
                                     if (code_len != 6) {
                                         is_valid = 0;
                                         snprintf(error_msg, sizeof(error_msg), 
                                                 "Access code must be exactly 6 digits! (Currently: %d)", code_len);
                                     } else {
-                                        // Check if all characters are digits
                                         for (int i = 0; i < code_len; i++) {
                                             if (inp_access_code.text[i] < '0' || inp_access_code.text[i] > '9') {
                                                 is_valid = 0;
@@ -1041,14 +942,13 @@ int main(int argc, char *argv[]) {
                                     pkt.type = MSG_CREATE_LOBBY;
                                     strncpy(pkt.room_name, inp_room_name.text, MAX_ROOM_NAME - 1);
                                     pkt.is_private = (code_len == 6) ? 1 : 0;
-                                    pkt.game_mode = selected_game_mode;  // Send selected game mode
+                                    pkt.game_mode = selected_game_mode;
                                     if (pkt.is_private) {
                                         strncpy(pkt.access_code, inp_access_code.text, 7);
                                     }
                                     send(sock, &pkt, sizeof(pkt), 0);
                                     show_create_room_dialog = 0;
                                 } else {
-                                    // Show error notification
                                     snprintf(notification_message, sizeof(notification_message), "%s", error_msg);
                                     notification_time = SDL_GetTicks();
                                 }
@@ -1072,39 +972,123 @@ int main(int argc, char *argv[]) {
                             }
                             if (e.key.keysym.sym == SDLK_ESCAPE) show_create_room_dialog = 0;
                         }
+                        // Consume all events when dialog is open
+                        continue; 
                     }
-                    
-                    // Join code dialog handling
-                    if (show_join_code_dialog && e.type == SDL_MOUSEBUTTONDOWN) {
-                        inp_join_code.is_active = is_mouse_inside(inp_join_code.rect, mx, my);
-                        
-                        if (is_mouse_inside(btn_create_confirm.rect, mx, my)) {
-                            if (strlen(inp_join_code.text) == 6) {
-                                ClientPacket pkt;
-                                memset(&pkt, 0, sizeof(pkt));
-                                pkt.type = MSG_JOIN_LOBBY;
-                                pkt.lobby_id = selected_private_lobby_id;
-                                strncpy(pkt.access_code, inp_join_code.text, 7);
-                                send(sock, &pkt, sizeof(pkt), 0);
+
+                    if (show_join_code_dialog) {
+                        if (e.type == SDL_MOUSEBUTTONDOWN) {
+                            inp_join_code.is_active = is_mouse_inside(inp_join_code.rect, mx, my);
+                            
+                            if (is_mouse_inside(btn_create_confirm.rect, mx, my)) {
+                                if (strlen(inp_join_code.text) == 6) {
+                                    ClientPacket pkt;
+                                    memset(&pkt, 0, sizeof(pkt));
+                                    pkt.type = MSG_JOIN_LOBBY;
+                                    pkt.lobby_id = selected_private_lobby_id;
+                                    strncpy(pkt.access_code, inp_join_code.text, 7);
+                                    send(sock, &pkt, sizeof(pkt), 0);
+                                    show_join_code_dialog = 0;
+                                }
+                            }
+                            if (is_mouse_inside(btn_cancel.rect, mx, my)) {
                                 show_join_code_dialog = 0;
                             }
                         }
-                        if (is_mouse_inside(btn_cancel.rect, mx, my)) {
-                            show_join_code_dialog = 0;
+                        
+                        if (e.type == SDL_TEXTINPUT && inp_join_code.is_active) {
+                            if (e.text.text[0] >= '0' && e.text.text[0] <= '9') {
+                                handle_text_input(&inp_join_code, e.text.text[0]);
+                            }
                         }
+                        
+                        if (e.type == SDL_KEYDOWN) {
+                            if (e.key.keysym.sym == SDLK_BACKSPACE && inp_join_code.is_active) {
+                                handle_text_input(&inp_join_code, '\b');
+                            }
+                            if (e.key.keysym.sym == SDLK_ESCAPE) show_join_code_dialog = 0;
+                        }
+                        // Consume all events when dialog is open
+                        continue;
                     }
-                    
-                    if (show_join_code_dialog && e.type == SDL_TEXTINPUT && inp_join_code.is_active) {
-                        if (e.text.text[0] >= '0' && e.text.text[0] <= '9') {
-                            handle_text_input(&inp_join_code, e.text.text[0]);
+
+                    // --- 2. MAIN LOBBY LIST HANDLING (Only if no dialogs) ---
+                    if (e.type == SDL_MOUSEBUTTONDOWN) {
+                        if (is_mouse_inside(btn_create.rect, mx, my)) {
+                            // Show create room dialog
+                            show_create_room_dialog = 1;
+                            snprintf(inp_room_name.text, sizeof(inp_room_name.text), "Room %d", lobby_count + 1);
+                            inp_access_code.text[0] = '\0';
+                            inp_room_name.is_active = 1;
+                            inp_access_code.is_active = 0;
                         }
-                    }
-                    
-                    if (show_join_code_dialog && e.type == SDL_KEYDOWN) {
-                        if (e.key.keysym.sym == SDLK_BACKSPACE && inp_join_code.is_active) {
-                            handle_text_input(&inp_join_code, '\b');
+                        if (is_mouse_inside(btn_refresh.rect, mx, my)) {
+                            send_packet(MSG_LIST_LOBBIES, 0);
                         }
-                        if (e.key.keysym.sym == SDLK_ESCAPE) show_join_code_dialog = 0;
+                        if (is_mouse_inside(btn_friends.rect, mx, my)) {
+                            send_packet(MSG_FRIEND_LIST, 0);
+                            current_screen = SCREEN_FRIENDS;
+                        }
+                        if (is_mouse_inside(btn_profile.rect, mx, my)) {
+                            send_packet(MSG_GET_PROFILE, 0);
+                            current_screen = SCREEN_PROFILE;
+                        }
+                        if (is_mouse_inside(btn_leaderboard.rect, mx, my)) {
+                            send_packet(MSG_GET_LEADERBOARD, 0);
+                            current_screen = SCREEN_LEADERBOARD;
+                        }
+                        if (is_mouse_inside(btn_quick_play.rect, mx, my)) {
+                            snprintf(notification_message, sizeof(notification_message),
+                                    "Quick Play matchmaking coming soon!");
+                            notification_time = SDL_GetTicks();
+                        }
+                        if (is_mouse_inside(btn_settings.rect, mx, my)) {
+                            current_screen = SCREEN_SETTINGS;
+                            settings_active_tab = 0; 
+                        }
+                        if (is_mouse_inside(btn_logout.rect, mx, my)) {
+                            clear_session_token();
+                            current_screen = SCREEN_LOGIN;
+                            status_message[0] = '\0';
+                            inp_user.text[0] = '\0';
+                            inp_pass.text[0] = '\0';
+                        }
+                        
+                        // Lobby click detection
+                        int y = 120;
+                        int list_width = 640;
+                        int card_height = 80;
+                        int start_x = 240;
+                        
+                        for (int i = 0; i < lobby_count; i++) {
+                            SDL_Rect r = {start_x, y, list_width, card_height};
+                            if (is_mouse_inside(r, mx, my)) {
+                                if (lobby_list[i].is_private) {
+                                    selected_private_lobby_id = lobby_list[i].id;
+                                    show_join_code_dialog = 1;
+                                    inp_join_code.text[0] = '\0';
+                                    inp_join_code.is_active = 1;
+                                } else {
+                                    if (lobby_list[i].status == LOBBY_PLAYING) {
+                                        ClientPacket pkt;
+                                        memset(&pkt, 0, sizeof(pkt));
+                                        pkt.type = MSG_SPECTATE;
+                                        pkt.lobby_id = lobby_list[i].id;
+                                        send(sock, &pkt, sizeof(pkt), 0);
+                                    } else {
+                                        ClientPacket pkt;
+                                        memset(&pkt, 0, sizeof(pkt));
+                                        pkt.type = MSG_JOIN_LOBBY;
+                                        pkt.lobby_id = lobby_list[i].id;
+                                        pkt.access_code[0] = '\0';
+                                        send(sock, &pkt, sizeof(pkt), 0);
+                                    }
+                                }
+                                selected_lobby_idx = i;
+                                break;
+                            }
+                            y += 85; 
+                        }
                     }
                     break;
                     
@@ -1202,6 +1186,7 @@ int main(int argc, char *argv[]) {
                         if (is_mouse_inside(btn_leave.rect, mx, my)) {
                             send_packet(MSG_LEAVE_LOBBY, 0);
                             current_screen = SCREEN_LOBBY_LIST;
+                            current_lobby.id = -1; // Reset lobby ID to prevent state pollution
                             send_packet(MSG_LIST_LOBBIES, 0);
                             lobby_error_message[0] = '\0';
                         }

@@ -110,7 +110,7 @@ int can_move_to(GameState *state, int x, int y) {
     int tile = state->map[y][x];
     // FIXED: Can't walk through bombs or explosions anymore!
     return (tile == EMPTY || 
-            tile == POWERUP_BOMB || tile == POWERUP_FIRE || tile == POWERUP_SPEED);
+            tile == POWERUP_BOMB || tile == POWERUP_FIRE);
 }
 
 // Returns: 0=nothing, 1=picked up, 2=already at max
@@ -148,12 +148,7 @@ int pickup_powerup(GameState *state, Player *p, int x, int y) {
             }
             break;
             
-        case POWERUP_SPEED:
-            // Speed power-up not implemented
-            printf("[GAME] Player %s picked up SPEED power-up! (Speed boost not implemented)\n", 
-                   p->username);
-            state->map[y][x] = EMPTY;
-            return 1;  // Picked up
+
     }
     return 0;  // Nothing happened
 }
@@ -294,17 +289,30 @@ void apply_sudden_death_shrinking(GameState *state) {
                state->shrink_zone_left, state->shrink_zone_top,
                state->shrink_zone_right, state->shrink_zone_bottom);
         
-        // Kill players outside safe zone
-        for (int i = 0; i < state->num_players; i++) {
-            if (state->players[i].is_alive) {
-                int px = state->players[i].x;
-                int py = state->players[i].y;
-                if (px < state->shrink_zone_left || px > state->shrink_zone_right ||
-                    py < state->shrink_zone_top || py > state->shrink_zone_bottom) {
-                    state->players[i].is_alive = 0;
-                    printf("[SUDDEN DEATH] Player %s died in death zone at (%d,%d)\n", 
-                           state->players[i].username, px, py);
-                }
+        // PHYSICAL WALLS: Fill dead zone with hard walls
+        for (int y = 0; y < MAP_HEIGHT; y++) {
+            for (int x = 0; x < MAP_WIDTH; x++) {
+                 if (x < state->shrink_zone_left || x > state->shrink_zone_right ||
+                     y < state->shrink_zone_top || y > state->shrink_zone_bottom) {
+                     // Turn everything outside safe zone into a hard wall
+                     if (state->map[y][x] != WALL_HARD) {
+                         state->map[y][x] = WALL_HARD; 
+                     }
+                 }
+            }
+        }
+    }
+    
+    // CONTINUOUS DEATH CHECK: Kill players outside safe zone immediately
+    for (int i = 0; i < state->num_players; i++) {
+        if (state->players[i].is_alive) {
+            int px = state->players[i].x;
+            int py = state->players[i].y;
+            if (px < state->shrink_zone_left || px > state->shrink_zone_right ||
+                py < state->shrink_zone_top || py > state->shrink_zone_bottom) {
+                state->players[i].is_alive = 0;
+                printf("[SUDDEN DEATH] Player %s died in death zone at (%d,%d)\n", 
+                       state->players[i].username, px, py);
             }
         }
     }

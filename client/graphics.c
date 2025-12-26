@@ -180,7 +180,7 @@ const SDL_Color COLOR_PLAYER3 = {255, 0, 255, 255};
 const SDL_Color COLOR_PLAYER4 = {0, 255, 255, 255};
 const SDL_Color COLOR_POWERUP_BOMB = {255, 215, 0, 255};
 const SDL_Color COLOR_POWERUP_FIRE = {255, 69, 0, 255};
-const SDL_Color COLOR_POWERUP_SPEED = {50, 205, 50, 255};
+
 
 // Text palette for sidebar
 static const SDL_Color COLOR_TEXT_PRIMARY = {237, 237, 237, 255};
@@ -362,9 +362,7 @@ void draw_powerup(SDL_Renderer *renderer, int x, int y, int type, int tick) {
         case POWERUP_FIRE:
             color = COLOR_POWERUP_FIRE;
             break;
-        case POWERUP_SPEED:
-            color = COLOR_POWERUP_SPEED;
-            break;
+
         default:
             return;
     }
@@ -428,14 +426,6 @@ void draw_powerup(SDL_Renderer *renderer, int x, int y, int type, int tick) {
         SDL_RenderFillRect(renderer, &f1);
         SDL_RenderFillRect(renderer, &f2);
         SDL_RenderFillRect(renderer, &f3);
-    } else if (type == POWERUP_SPEED) {
-        // Speed arrows
-        SDL_Rect s1 = {cx - 8, cy - 6, 8, 3};
-        SDL_Rect s2 = {cx - 4, cy - 2, 10, 3};
-        SDL_Rect s3 = {cx, cy + 2, 8, 3};
-        SDL_RenderFillRect(renderer, &s1);
-        SDL_RenderFillRect(renderer, &s2);
-        SDL_RenderFillRect(renderer, &s3);
     }
     
     // Sparkle effects
@@ -756,7 +746,7 @@ void render_game(SDL_Renderer *renderer, TTF_Font *font, int tick, int my_player
                     break;
                 case POWERUP_BOMB:
                 case POWERUP_FIRE:
-                case POWERUP_SPEED:
+
                     draw_powerup(renderer, x, y, current_state.map[y][x], tick);
                     break;
                 case EMPTY:

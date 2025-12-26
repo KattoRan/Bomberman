@@ -30,7 +30,8 @@
 #define EXPLOSION 4
 #define POWERUP_BOMB 5      // Tăng số bom
 #define POWERUP_FIRE 6      // Tăng tầm nổ
-#define POWERUP_SPEED 7     // Tăng tốc độ (dự phòng)
+#define POWERUP_FIRE 6      // Tăng tầm nổ
+
 #define MOVE_UP 0
 #define MOVE_DOWN 1
 #define MOVE_LEFT 2
