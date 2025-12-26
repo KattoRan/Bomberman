@@ -1854,9 +1854,9 @@ int main(int argc, char *argv[]) {
                 Button back_btn;
                 back_btn.is_hovered = is_mouse_inside(back_btn.rect, mx, my);
                 // Determine title based on whether it's our profile or someone else's
-                const char *p_title = NULL;
+                char p_title[128] = "";
                 if (strcmp(my_profile.username, my_username) != 0 && strlen(my_profile.username) > 0) {
-                     p_title = "FRIEND PROFILE"; 
+                     snprintf(p_title, sizeof(p_title), "PROFILE: %s", my_profile.display_name);
                 }
                 render_profile_screen(rend, font_medium, font_small, &my_profile, &back_btn, p_title);
                 break;
