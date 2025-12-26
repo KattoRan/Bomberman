@@ -230,6 +230,9 @@ void handle_client_packet(int socket_fd, ClientPacket *pkt) {
         case MSG_GET_LEADERBOARD:
             handle_get_leaderboard(socket_fd, pkt);
             break;
+        case MSG_FRIEND_INVITE:
+            handle_invite(socket_fd, pkt);
+            break;
     }
 }
 

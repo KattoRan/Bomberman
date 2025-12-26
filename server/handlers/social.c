@@ -219,11 +219,25 @@ void handle_invite(int socket_fd, ClientPacket *pkt) {
     memset(&response, 0, sizeof(ServerPacket));
     
     int target_socket = -1;
-    for (int i = 0; i < num_clients; i++) {
-        if (clients[i].is_authenticated && 
-            strcmp(clients[i].display_name, pkt->target_display_name) == 0) {
-            target_socket = clients[i].socket_fd;
-            break;
+    
+    // Priority: Lookup by ID
+    if (pkt->target_user_id > 0) {
+        for (int i = 0; i < num_clients; i++) {
+            if (clients[i].is_authenticated && clients[i].user_id == pkt->target_user_id) {
+                target_socket = clients[i].socket_fd;
+                break;
+            }
+        }
+    }
+    
+    // Fallback: Lookup by display name (for backward compatibility or if ID missing)
+    if (target_socket == -1) {
+        for (int i = 0; i < num_clients; i++) {
+            if (clients[i].is_authenticated && 
+                strcmp(clients[i].display_name, pkt->target_display_name) == 0) {
+                target_socket = clients[i].socket_fd;
+                break;
+            }
         }
     }
     

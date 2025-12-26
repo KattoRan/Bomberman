@@ -1171,6 +1171,7 @@ int main(int argc, char *argv[]) {
                                                 memset(&pkt, 0, sizeof(pkt));
                                                 pkt.type = MSG_FRIEND_INVITE;
                                                 strncpy(pkt.target_display_name, friends_list[i].display_name, MAX_DISPLAY_NAME-1);
+                                                pkt.target_user_id = friends_list[i].user_id; // Use ID for lookup
                                                 send(sock, &pkt, sizeof(pkt), 0);
                                                 
                                                 // Track invited user locally
