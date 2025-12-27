@@ -1,15 +1,26 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -Icommon
+CFLAGS = -Wall -Wextra -Icommon -Iclient 		
 
 # SDL2 (client dùng)
 SDL_CFLAGS = `sdl2-config --cflags`
 SDL_LIBS = `sdl2-config --libs` -lSDL2_image -lSDL2_ttf -lSDL2_mixer -lm
 
 # ---- DIRECTORIES ----
-CLIENT_SRC = client/graphics.c client/main.c client/ui_screens.c client/ui_new_screens.c
+
+# CLIENT SOURCES
+CLIENT_SRC := \
+    $(wildcard client/*.c) \
+    $(wildcard client/graphics/*.c) \
+    $(wildcard client/ui/*.c) \
+    $(wildcard client/state/*.c) \
+    $(wildcard client/handlers/*.c) \
+    $(wildcard client/network/*.c)
+
+# SERVER SOURCES
 SERVER_SRC = $(filter-out server/test_elo_sim.c, $(wildcard server/*.c))
 SERVER_HANDLERS = $(wildcard server/handlers/*.c)
 
+# OBJECTS
 CLIENT_OBJ = $(CLIENT_SRC:.c=.o)
 SERVER_OBJ = $(SERVER_SRC:.c=.o) $(SERVER_HANDLERS:.c=.o)
 
@@ -26,7 +37,6 @@ $(CLIENT_BIN): $(CLIENT_OBJ)
 client/%.o: client/%.c
 	$(CC) $(CFLAGS) $(SDL_CFLAGS) -c $< -o $@
 
-
 # ---- SERVER BUILD ----
 $(SERVER_BIN): $(SERVER_OBJ)
 	$(CC) -o $@ $^ -lsqlite3 -lm
@@ -34,10 +44,19 @@ $(SERVER_BIN): $(SERVER_OBJ)
 server/%.o: server/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-
 # ---- CLEAN ----
 clean:
-	rm -f client/*.o server/*.o server/handlers/*.o $(CLIENT_BIN) $(SERVER_BIN)
+	rm -f \
+		client/*.o \
+		client/graphics/*.o \
+		client/ui/*.o \
+		client/state/*.o \
+		client/handlers/*.o \
+		client/network/*.o \
+		server/*.o \
+		server/handlers/*.o \
+		$(CLIENT_BIN) \
+		$(SERVER_BIN)
 
 # ---- RUN ----
 run-client: $(CLIENT_BIN)

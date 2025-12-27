@@ -6,6 +6,33 @@
 #include <SDL2/SDL_ttf.h>
 #include "../common/protocol.h"
 
+// --- BẢNG MÀU CẢI TIẾN (Modern Dark Theme) ---
+extern const SDL_Color CLR_BG;      // Nền xanh đậm sang trọng
+extern const SDL_Color CLR_GRID;
+extern const SDL_Color CLR_PRIMARY;
+extern const SDL_Color CLR_PRIMARY_DK;
+extern const SDL_Color CLR_ACCENT;
+extern const SDL_Color CLR_ACCENT_DK;
+extern const SDL_Color CLR_WHITE;       // Trắng nhẹ
+extern const SDL_Color CLR_GRAY;        // Xám trung bình
+extern const SDL_Color CLR_GRAY_LIGHT;  // Xám sáng
+extern const SDL_Color CLR_INPUT_BG;    // Nền input
+extern const SDL_Color CLR_BTN_NORM;    // Nút xanh
+extern const SDL_Color CLR_BTN_HOVER;   // Hover sáng hơn
+extern const SDL_Color CLR_SUCCESS;     // Xanh lá
+extern const SDL_Color CLR_DANGER;      // Đỏ
+extern const SDL_Color CLR_WARNING;     // Vàng
+extern const SDL_Color CLR_PURPLE;      // Tím (Host)
+extern const SDL_Color CLR_PURPLE_DARK; // Tím đậm
+
+// --- GRADIENT & GLOW COLORS ---
+extern const SDL_Color CLR_ACCENT_LIGHT;  // Cam sáng (gradient)
+extern const SDL_Color CLR_PRIMARY_LIGHT;  // Xanh sáng hơn
+extern const SDL_Color CLR_BG_DARK;           // Nền đậm nhất
+extern const SDL_Color CLR_GLOW;           // Glow hover
+extern const SDL_Color CLR_SHADOW_SOFT;           // Soft shadows
+extern const SDL_Color CLR_SHADOW_HARD;           // Hard shadows
+
 // Định nghĩa Struct Button
 typedef enum {
     BTN_PRIMARY,
@@ -32,64 +59,70 @@ typedef struct {
 // Biến toàn cục cho thông báo lỗi trong lobby room
 extern char lobby_error_message[256];
 
-// Helper drawing functions
-void draw_button(SDL_Renderer *renderer, TTF_Font *font, Button *btn);
-void draw_input_field(SDL_Renderer *renderer, TTF_Font *font, InputField *field);
-
-// Modern UI helper functions
+// Helper Functions
+void truncate_text_to_fit(char *text, size_t text_size, TTF_Font *font, int max_width);
 void draw_rounded_rect(SDL_Renderer *renderer, SDL_Rect rect, SDL_Color color, int radius);
 void draw_rounded_border(SDL_Renderer *renderer, SDL_Rect rect, SDL_Color color, int radius, int thickness);
 void draw_layered_shadow(SDL_Renderer *renderer, SDL_Rect rect, int radius, int offset);
+void draw_button(SDL_Renderer *renderer, TTF_Font *font, Button *btn);
+void draw_input_field(SDL_Renderer *renderer, TTF_Font *font, InputField *field);
 void draw_background_grid(SDL_Renderer *renderer, int w, int h);
 
-// Khai báo các hàm UI (Prototype)
+// Utility functions
+int is_mouse_inside(SDL_Rect rect, int mx, int my);
+void handle_text_input(InputField *field, char c);
+void render_friend_delete_dialog(SDL_Renderer *renderer, TTF_Font *font);
+
+// UI Screens
+// 1. Login Screen -> ui_login.c
 void render_login_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Font *font_small, 
                         InputField *username, InputField *email, InputField *password,
                         Button *login_btn, Button *register_btn, 
                         const char *message);
 
+// 2. Lobby List Screen -> ui_lobby.c
 void render_lobby_list_screen(SDL_Renderer *renderer, TTF_Font *font,
                               LobbySummary *lobbies, int lobby_count,
                               Button *create_btn, Button *refresh_btn,
                               int selected_lobby);
 
-
+// 3. Lobby Room Screen -> ui_lobby.c
 void render_lobby_room_screen(SDL_Renderer *renderer, TTF_Font *font,
                               Lobby *lobby, int my_player_id,
                               Button *ready_btn, Button *start_btn, 
                               Button *leave_btn);
 
+// 4. Room creation dialog -> ui_dialog.c
+void render_create_room_dialog(SDL_Renderer *renderer, TTF_Font *font,
+                               InputField *room_name, InputField *access_code,
+                               Button *create_btn, Button *cancel_btn);
 
+// 5. Friends Screen -> ui_friend.c
 void render_friends_screen(SDL_Renderer *renderer, TTF_Font *font,
                            FriendInfo *friends, int friend_count,
                            FriendInfo *pending, int pending_count,
                            FriendInfo *sent, int sent_count,
                            Button *back_btn);
-
+// 6. Profile Screen -> ui_social.c
 void render_profile_screen(SDL_Renderer *renderer, TTF_Font *font_medium, TTF_Font *font_small,
                            ProfileData *profile,
                            Button *back_btn, const char *title_override);
 
+// 7. Leaderboard Screen -> ui_social.c
 void render_leaderboard_screen(SDL_Renderer *renderer, TTF_Font *font_medium, TTF_Font *font_small,
                                LeaderboardEntry *entries, int entry_count,
                                Button *back_btn);
-
-void render_create_room_dialog(SDL_Renderer *renderer, TTF_Font *font,
-                               InputField *room_name, InputField *access_code,
-                               Button *create_btn, Button *cancel_btn);
-
-// render_settings_screen removed
 
 void render_post_match_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Font *font_small,
                               int winner_id, int *elo_changes, int *kills, int duration_seconds,
                               Button *rematch_btn, Button *lobby_btn, GameState *game_state, int my_player_id);
 
-// Chat rendering functions
+// ui_chat.c
 void render_chat_message_block(SDL_Renderer *renderer, TTF_Font *font,
                                const char *sender, const char *message,
                                int player_id, int is_current_user,
                                int x, int y, int width);
-
+// ui_chat.c
 void render_chat_panel_room(SDL_Renderer *renderer, TTF_Font *font,
                             void *chat_messages, void *input_field,
                             int chat_count);

@@ -1,4 +1,4 @@
-/* client/main.c - With Notifications System */
+/* client/main.c - Clean Application Entry Point */
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
 #include <sys/socket.h>
@@ -6,662 +6,22 @@
 #include <unistd.h>
 #include <string.h>
 #include <fcntl.h>
+#include <stdio.h>
 #include "../common/protocol.h"
-#include "ui.h" 
+#include "ui/ui.h"
+#include "graphics/graphics.h"
+#include "state/client_state.h"
+#include "network/network.h"
+#include "handlers/session.h"
+#include "handlers/game.h"
+#include "handlers/event_handler.h"
 
-extern void render_game(SDL_Renderer*, TTF_Font*, int, int, int);
-extern TTF_Font* init_font();
-extern void add_notification(const char *text, SDL_Color color);
-extern SDL_Rect get_game_leave_button_rect();
+// Global flag for main loop
+int running = 1;
 
-// State
-typedef enum {
-    SCREEN_LOGIN,
-    SCREEN_REGISTER,
-    SCREEN_LOBBY_LIST,
-    SCREEN_LOBBY_ROOM,
-    SCREEN_GAME,
-    SCREEN_FRIENDS,
-    SCREEN_PROFILE,
-    SCREEN_LEADERBOARD,
-    SCREEN_POST_MATCH
-} ScreenState;
+/* ===== INITIALIZATION FUNCTIONS ===== */
 
-ScreenState current_screen = SCREEN_LOGIN;
-
-int sock;
-int my_player_id = -1;
-char my_username[MAX_USERNAME];
-char status_message[256] = "";
-char lobby_error_message[256] = "";
-Uint32 error_message_time = 0;
-
-// Data Store
-LobbySummary lobby_list[MAX_LOBBIES];
-int lobby_count = 0;
-int selected_lobby_idx = -1;
-Lobby current_lobby;
-
-// Game State (shared with graphics.c)
-GameState current_state;
-GameState previous_state;  // Để theo dõi thay đổi
-
-// Friends, Profile, Leaderboard Data
-FriendInfo friends_list[50];
-int friends_count = 0;
-FriendInfo pending_requests[50];
-int pending_count = 0;
-FriendInfo sent_requests[50];  // Outgoing requests
-int sent_count = 0;
-ProfileData my_profile = {0};  // Initialize to zero
-LeaderboardEntry leaderboard[100];
-int leaderboard_count = 0;
-
-// UI Components - UPDATED SIZES AND POSITIONS
-// Login/Register inputs - centered, adjusted for 1120x720
-InputField inp_user  = {{335, 240, 450, 65}, "", "Username:", 0, 30};
-InputField inp_email = {{335, 340, 450, 65}, "", "Email:",    0, 127};
-InputField inp_pass  = {{335, 440, 450, 65}, "", "Password:", 0, 30};
-Button btn_login = {{335, 560, 180, 60}, "Login",    0, BTN_PRIMARY};
-Button btn_reg   = {{605, 560, 180, 60}, "Register", 0, BTN_PRIMARY};
-
-// Lobby list buttons - BOTTOM CENTER, adjusted for 1120x720
-Button btn_create     = {{250, 620, 200, 60}, "Create Room", 0 , BTN_PRIMARY};
-Button btn_refresh    = {{460, 620, 200, 60}, "Refresh", 0 , BTN_PRIMARY};
-Button btn_friends    = {{670, 620, 200, 60}, "Friends", 0, BTN_PRIMARY};
-// Button btn_quick_play removed
-Button btn_profile     = {{850, 20, 130, 50}, "Profile", 0, BTN_PRIMARY};
-Button btn_leaderboard = {{1000, 20, 80, 50}, "Top", 0, BTN_OUTLINE};
-
-
-// Lobby room buttons
-Button btn_ready = {{80, 630, 200, 50}, "Ready", 0, BTN_PRIMARY};
-Button btn_start = {{80, 630, 200, 50}, "Start Game", 0, BTN_PRIMARY};
-Button btn_leave = {{320, 630, 200, 50}, "Leave", 0, BTN_DANGER};
-
-
-// Lobby room - host-only buttons
-// Button btn_lock_room = {{900, 100, 180, 50}, "Lock Room", 0};
-// Button btn_chat      = {{900, 160, 180, 50}, "💬", 0};
-// Kick buttons will be positioned per-player dynamically
-
-// Game mode selection
-int selected_game_mode = 0;  // 0=Classic, 1=Sudden Death, 2=Fog of War
-
-// Room creation UI - adjusted for 1120x720
-InputField inp_room_name   = {{335, 260, 450, 60}, "", "Room Name:", 0, 63};
-InputField inp_access_code = {{335, 350, 350, 60}, "", "Access Code (6 digits, optional):", 0, 6};
-int show_create_room_dialog = 0;
-int creating_private_room = 0;
-Button btn_create_confirm = {{370, 440, 220, 60}, "Create", 0, BTN_PRIMARY};
-Button btn_cancel         = {{620, 440, 220, 60}, "Cancel", 0, BTN_DANGER};
-
-// Notification system
-char notification_message[256] = "";
-Uint32 notification_time = 0;
-const int NOTIFICATION_DURATION = 3000; // 3 seconds
-
-// Access code prompt for joining private rooms - adjusted for 1120x720
-InputField inp_join_code = {{335, 320, 450, 60}, "", "Enter 6-digit access code:", 0, 6};
-int show_join_code_dialog = 0;
-int selected_private_lobby_id = -1;
-
-// Friend request UI - adjusted for 1120x720
-InputField inp_friend_request = {{400, 620, 360, 60}, "", "Enter display name...", 0, 31};
-Button btn_send_friend_request = {{800, 620, 220, 60}, "Send Request", 0};
-
-
-// Delete friend confirmation
-int show_delete_confirm = 0;
-int delete_friend_index = -1;
-
-// Settings screen state removed
-
-// Post-match screen state  
-int post_match_winner_id = -1;
-int post_match_elo_changes[4] = {0, 0, 0, 0};
-int post_match_kills[4] = {0, 0, 0, 0};
-int post_match_duration = 0;  // Match duration in seconds
-int post_match_shown = 0;  // Prevent showing multiple times
-Button btn_rematch       = {{360, 800, 250, 60}, "Rematch", 0};
-Button btn_return_lobby  = {{610, 800, 250, 60}, "Back to Room", 0};
-
-Button btn_logout        = {{40, 45, 120, 50}, "Logout", BTN_DANGER}; // Top left
-
-// Game timer tracking
-Uint32 game_start_time = 0;  // SDL ticks when game started
-
-// Chat system state
-#define MAX_CHAT_MESSAGES 50
-typedef struct {
-    char sender[MAX_USERNAME];
-    char message[200];
-    Uint32 timestamp;  // SDL_GetTicks() when received
-    int player_id;     // For color coding (0-3)
-    int is_current_user;  // 1 if this is the current user's message
-} ChatMessage;
-
-// --- Invite System State ---
-IncomingInvite current_invite = {0};
-int show_invite_overlay = 0;
-int invited_user_ids[50];
-int invited_count = 0;
-
-// Buttons for Invite System
-Button btn_open_invite = {{910, 15, 180, 50}, "Invite Friend", 0, BTN_PRIMARY};
-Button btn_close_invite = {{0, 0, 40, 40}, "X", 0, BTN_DANGER}; // Positioned dynamically
-Button btn_invite_accept = {{0, 0, 150, 50}, "Accept", 0, BTN_PRIMARY};
-Button btn_invite_decline = {{0, 0, 150, 50}, "Decline", 0, BTN_DANGER};
-
-ChatMessage chat_history[MAX_CHAT_MESSAGES];
-int chat_count = 0;
-int chat_panel_open = 0;  // Toggle for gameplay (0=mini, 1=full)
-InputField inp_chat_message = {{0, 0, 600, 40}, "", "", 0, 199};  // Max 199 chars + null
-
-// --- Session Persistence ---
-char session_file_path[256];
-
-void determine_session_path(int argc, char *argv[]) {
-    // Priority 1: --profile <name>
-    for (int i = 1; i < argc - 1; i++) {
-        if (strcmp(argv[i], "--profile") == 0) {
-            const char *home = getenv("HOME");
-            if (!home) home = ".";
-            snprintf(session_file_path, sizeof(session_file_path), "%s/.bomberman_session_%s", home, argv[i+1]);
-            // printf("[SESSION] Using profile path: %s\n", session_file_path);
-            return;
-        }
-    }
-
-    // Priority 2: TTY-based path (Automatic isolation)
-    char *tty = ttyname(STDIN_FILENO);
-    if (tty) {
-        // Sanitize TTY name (replace / with _)
-        char safe_tty[64];
-        int j = 0;
-        for (int i = 0; tty[i] && j < 63; i++) {
-            if (tty[i] == '/') safe_tty[j++] = '_';
-            else safe_tty[j++] = tty[i];
-        }
-        safe_tty[j] = '\0';
-        
-        const char *home = getenv("HOME");
-        if (!home) home = ".";
-        snprintf(session_file_path, sizeof(session_file_path), "%s/.bomberman_session%s", home, safe_tty);
-        // printf("[SESSION] Auto-detected TTY path: %s\n", session_file_path);
-        return;
-    }
-
-    // Priority 3: Fallback default
-    const char *home = getenv("HOME");
-    if (!home) home = ".";
-    snprintf(session_file_path, sizeof(session_file_path), "%s/.bomberman_session_default", home);
-    // printf("[SESSION] Using fallback path: %s\n", session_file_path);
-}
-
-void save_session_token(const char *token) {
-    if (token[0] == '\0') return; // Don't save empty tokens
-    FILE *f = fopen(session_file_path, "w");
-    if (f) {
-        fprintf(f, "%s", token);
-        fclose(f);
-        // printf("[SESSION] Token saved.\n");
-    }
-}
-
-int load_session_token(char *buffer) {
-    FILE *f = fopen(session_file_path, "r");
-    if (f) {
-        if (fgets(buffer, 64, f)) {
-            // Remove newline if present
-            buffer[strcspn(buffer, "\n")] = 0;
-            fclose(f);
-            return 1;
-        }
-        fclose(f);
-    }
-    return 0;
-}
-
-void clear_session_token() {
-    unlink(session_file_path);
-    // printf("[SESSION] Token cleared.\n");
-}
-
-// --- Helper Functions ---
-
-int is_mouse_inside(SDL_Rect rect, int mx, int my) {
-    return (mx >= rect.x && mx <= rect.x + rect.w && my >= rect.y && my <= rect.y + rect.h);
-}
-
-void handle_text_input(InputField *field, char c) {
-    if (!field->is_active) return;
-    int len = strlen(field->text);
-    if (c == '\b') {
-        if (len > 0) field->text[len-1] = '\0';
-    } else if (len < field->max_length) {
-        field->text[len] = c;
-        field->text[len+1] = '\0';
-    }
-}
-
-int find_my_player_id(Lobby *lobby, const char *username) {
-    for (int i = 0; i < lobby->num_players; i++) {
-        if (strcmp(lobby->players[i].username, username) == 0) {
-            return i;
-        }
-    }
-    return -1;
-}
-
-int all_players_ready(Lobby *lobby) {
-    for (int i = 0; i < lobby->num_players; i++) {
-        if (!lobby->players[i].is_ready) return 0;
-    }
-    return 1;
-}
-
-// Kiểm tra sự thay đổi trong game state
-void check_game_changes() {
-    // Kiểm tra người chơi chết
-    for (int i = 0; i < current_state.num_players; i++) {
-        if (previous_state.players[i].is_alive && !current_state.players[i].is_alive) {
-            char msg[128];
-            snprintf(msg, sizeof(msg), "%s has been defeated!", 
-                    current_state.players[i].username);
-            add_notification(msg, (SDL_Color){255, 68, 68, 255});
-        }
-        
-        // Kiểm tra power-up
-        if (current_state.players[i].max_bombs > previous_state.players[i].max_bombs) {
-            if (i == my_player_id) { // Chỉ thông báo cho người chơi hiện tại
-                add_notification("Picked up BOMB power-up! +1 Bomb", 
-                               (SDL_Color){255, 215, 0, 255});
-            }
-        }
-        
-        if (current_state.players[i].bomb_range > previous_state.players[i].bomb_range) {
-            if (i == my_player_id) {
-                add_notification("Picked up FIRE power-up! +1 Blast Range", 
-                               (SDL_Color){255, 69, 0, 255});
-            }
-        }
-    }
-    
-    // Cập nhật previous state
-    memcpy(&previous_state, &current_state, sizeof(GameState));
-}
-
-// --- Network packet receiving ---
-int receive_server_packet(ServerPacket *out_packet) {
-    static char buffer[sizeof(ServerPacket)];
-    static int bytes_received = 0;
-    
-    int n = recv(sock, buffer + bytes_received, 
-                 sizeof(ServerPacket) - bytes_received, MSG_DONTWAIT);
-    
-    if (n > 0) {
-        bytes_received += n;
-        
-        if (bytes_received == sizeof(ServerPacket)) {
-            memcpy(out_packet, buffer, sizeof(ServerPacket));
-            bytes_received = 0;
-            return 1;
-        }
-    } else if (n == 0) {
-        return -1;
-    }
-    
-    return 0;
-}
-
-// --- Network Functions ---
-void send_packet(int type, int data) {
-    ClientPacket pkt;
-    memset(&pkt, 0, sizeof(pkt));
-    pkt.type = type;
-    pkt.data = data;
-    strncpy(pkt.username, my_username, MAX_USERNAME);
-    send(sock, &pkt, sizeof(pkt), 0);
-}
-
-void process_server_packet(ServerPacket *pkt) {
-    switch (pkt->type) {
-        case MSG_AUTH_RESPONSE:
-            if (pkt->code == AUTH_SUCCESS) {
-                if (current_screen == SCREEN_LOGIN || current_screen == SCREEN_REGISTER) {
-                    current_screen = SCREEN_LOBBY_LIST;
-                }
-                send_packet(MSG_LIST_LOBBIES, 0); 
-                
-                // Save session token
-                if (pkt->payload.auth.session_token[0] != '\0') {
-                    save_session_token(pkt->payload.auth.session_token);
-                }
-                
-                strncpy(my_username, pkt->payload.auth.username, MAX_USERNAME); // Use server provided username
-                status_message[0] = '\0';
-                
-                // Show welcome notification
-                snprintf(notification_message, sizeof(notification_message), "Welcome, %s!", my_username);
-                notification_time = SDL_GetTicks();
-                
-                // printf("[CLIENT] Authenticated as: %s\n", my_username);
-            } else {
-                if (current_screen == SCREEN_LOGIN) { 
-                    // Only show errors if we are actually ON the login screen
-                    // (prevents auto-login failure from showing alert, it just stays on login)
-                    if (pkt->code == AUTH_FAIL && pkt->message[0] == '\0') {
-                         strcpy(status_message, "Session expired");
-                    } else {
-                         strncpy(status_message, pkt->message, sizeof(status_message));
-                    }
-                } else {
-                    // Auto-login failed implicitly -> force to login screen
-                    current_screen = SCREEN_LOGIN; 
-                    clear_session_token();
-                }
-                if (pkt->code == AUTH_USER_EXISTS) {
-                    strncpy(status_message,
-                            "Email and username are taken. Try another.",
-                            sizeof(status_message));
-                } else if (pkt->code == AUTH_USERNAME_EXISTS) {
-                    strncpy(status_message,
-                            "Username is taken. Try another.",
-                            sizeof(status_message));
-                } else if (pkt->code == AUTH_EMAIL_EXISTS) {
-                    strncpy(status_message,
-                            "Email is taken. Try another.",
-                            sizeof(status_message));
-                } else {
-                    strncpy(status_message, pkt->message, sizeof(status_message));
-                }
-            }
-            break;
-
-        case MSG_LOBBY_LIST:
-            lobby_count = pkt->payload.lobby_list.count;
-            memcpy(lobby_list, pkt->payload.lobby_list.lobbies, sizeof(lobby_list));
-            break;
-
-        case MSG_LOBBY_UPDATE:
-            current_lobby = pkt->payload.lobby;
-            
-            // Show access code notification if we just created a private room
-            static int last_lobby_id = -1;
-            if (current_lobby.is_private && current_lobby.id != last_lobby_id && 
-                strcmp(current_lobby.host_username, my_username) == 0) {
-                snprintf(notification_message, sizeof(notification_message), 
-                        "Private room created! Code: %s", current_lobby.access_code);
-                notification_time = SDL_GetTicks();
-            }
-            last_lobby_id = current_lobby.id;
-            
-            // Find my player ID
-            my_player_id = -1;
-            for (int i = 0; i < current_lobby.num_players; i++) {
-                if (strcmp(current_lobby.players[i].username, my_username) == 0) {
-                    my_player_id = i;
-                    break;
-                }
-            }
-            
-            // --- FIX: CLEAR CHAT HISTORY ON NEW ROOM ---
-            // If we are entering a new lobby (not just an update for the same one), clear chat
-            static int chat_last_lobby_id = -2;
-            if (current_lobby.id != chat_last_lobby_id) {
-                chat_count = 0;
-                memset(chat_history, 0, sizeof(chat_history));
-                chat_last_lobby_id = current_lobby.id;
-                // printf("[CLIENT] Chat history cleared for new room %d\n", current_lobby.id);
-            }
-            
-            if (current_lobby.status == LOBBY_PLAYING) {
-                if (current_screen != SCREEN_GAME) {
-                    add_notification("Game started!", (SDL_Color){0, 255, 0, 255});
-                    game_start_time = SDL_GetTicks();  // Start the timer
-                    post_match_shown = 0;  // Reset flag for new match
-                }
-                current_screen = SCREEN_GAME;
-                memset(&current_state, 0, sizeof(GameState));
-                memset(&previous_state, 0, sizeof(GameState));
-                lobby_error_message[0] = '\0';
-            } else {
-                // Don't switch to lobby room if showing post-match screen
-                if (current_screen != SCREEN_POST_MATCH) {
-                    current_screen = SCREEN_LOBBY_ROOM;
-                }
-            }
-            break;
-
-        case MSG_GAME_STATE:
-            current_state = pkt->payload.game_state;
-            check_game_changes();
-            
-            if (current_state.game_status == GAME_ENDED) {
-                printf("\n╔═══════════════════════╗\n");
-                printf("║      GAME ENDED!           ║\n");
-                if (current_state.winner_id >= 0) {
-                    printf("║  Winner: %s\n", 
-                           current_state.players[current_state.winner_id].username);
-                    
-                    char msg[128];
-                    if (current_state.winner_id == 0) {
-                        snprintf(msg, sizeof(msg), "Congratulations! You Win!");
-                        add_notification(msg, (SDL_Color){0, 255, 0, 255});
-                    } else {
-                        snprintf(msg, sizeof(msg), "%s has won!", 
-                                current_state.players[current_state.winner_id].username);
-                        add_notification(msg, (SDL_Color){255, 215, 0, 255});
-                    }
-                } else {
-                    printf("║      Draw!                 ║\n");
-                    add_notification("Match draw!", (SDL_Color){200, 200, 200, 255});
-                }
-                printf("╚═══════════════════════╝\n\n");
-                
-                // Switch to post-match screen (only once)
-                if ((current_screen == SCREEN_GAME || current_screen == SCREEN_LOBBY_ROOM) && !post_match_shown) {
-                    current_screen = SCREEN_POST_MATCH;
-                    post_match_shown = 1;  // Mark as shown
-                    
-                    // Populate post-match data with REAL values
-                    post_match_winner_id = current_state.winner_id;
-                    post_match_duration = current_state.match_duration_seconds;
-                    // printf("[CLIENT] Post-match data from server:\n");
-                    for (int i = 0; i < current_state.num_players && i < MAX_CLIENTS; i++) {
-                        post_match_elo_changes[i] = current_state.elo_changes[i];  // Real ELO changes!
-                        post_match_kills[i] = current_state.kills[i];  // Real kills!
-                        // printf("[CLIENT]   Player %d: ELO change = %d, Kills = %d\n", 
-                        //       i, post_match_elo_changes[i], post_match_kills[i]);
-                    }
-                    // printf("[CLIENT]   Match duration: %d seconds\n", post_match_duration);
-                    
-                    // printf("[CLIENT] Switched to post-match screen\n");
-                }
-            }
-            break;
-            
-        case MSG_ERROR:
-            strncpy(status_message, pkt->message, sizeof(status_message));
-            strncpy(lobby_error_message, pkt->message, sizeof(lobby_error_message));
-            break;
-            
-        case MSG_FRIEND_LIST_RESPONSE:
-            // Server sends: total count in payload.friend_list.count
-            // code field bit-packed: low byte = pending_count, high byte = sent_count
-            pending_count = pkt->code & 0xFF;  // Low byte
-            sent_count = (pkt->code >> 8) & 0xFF;  // High byte
-            friends_count = pkt->payload.friend_list.count - pending_count - sent_count;
-            
-            // Copy accepted friends (first part of array)
-            if (friends_count > 0 && friends_count <= 50) {
-                memcpy(friends_list, pkt->payload.friend_list.friends, 
-                       sizeof(FriendInfo) * friends_count);
-            }
-            
-            // Copy pending requests (second part)
-            if (pending_count > 0 && pending_count <= 50) {
-                memcpy(pending_requests, &pkt->payload.friend_list.friends[friends_count], 
-                       sizeof(FriendInfo) * pending_count);
-                
-                // Show notification for new pending requests
-                if (pending_count > 0) {
-                    snprintf(notification_message, sizeof(notification_message),
-                            "You have %d pending friend request%s!", pending_count, pending_count > 1 ? "s" : "");
-                    notification_time = SDL_GetTicks();
-                }
-            }
-            
-            // Copy sent requests (third part)
-            if (sent_count > 0 && sent_count <= 50) {
-                memcpy(sent_requests, &pkt->payload.friend_list.friends[friends_count + pending_count],
-                       sizeof(FriendInfo) * sent_count);
-            }
-            
-            printf("[CLIENT] Received %d friends, %d pending, %d sent \n", friends_count, pending_count, sent_count);
-            break;
-        
-        case MSG_FRIEND_RESPONSE:
-            if (pkt->code == 0) {
-                // Success - show notification
-                snprintf(notification_message, sizeof(notification_message),
-                        "Friend request sent!");
-                notification_time = SDL_GetTicks();
-                // Refresh friends list
-                send_packet(MSG_FRIEND_LIST, 0);
-            } else {
-                // Error
-                snprintf(notification_message, sizeof(notification_message),
-                        "Request failed");
-                notification_time = SDL_GetTicks();
-            }
-            break;
-            
-        case MSG_PROFILE_RESPONSE:
-            my_profile = pkt->payload.profile;
-            printf("[CLIENT] Received profile: ELO %d, Matches %d\n", 
-                   my_profile.elo_rating, my_profile.total_matches);
-            break;
-            
-        case MSG_LEADERBOARD_RESPONSE:
-            leaderboard_count = pkt->payload.leaderboard.count;
-            if (leaderboard_count > 100) leaderboard_count = 100;
-            memcpy(leaderboard, pkt->payload.leaderboard.entries,
-                   sizeof(LeaderboardEntry) * leaderboard_count);
-            printf("[CLIENT] Received %d leaderboard entries\n", leaderboard_count);
-            break;
-            
-        case MSG_NOTIFICATION:
-            // Handle notifications (including power-up caps during game)
-            if (pkt->message[0] != '\0') {
-                snprintf(notification_message, sizeof(notification_message), "%s", pkt->message);
-                notification_time = SDL_GetTicks();
-                printf("[CLIENT] Notification: %s\n", pkt->message);
-            }
-            break;
-        
-        case MSG_CHAT:
-        {
-            // Store incoming chat message
-            if (chat_count < MAX_CHAT_MESSAGES) {
-                ChatMessage* msg = &chat_history[chat_count];
-                strncpy(msg->sender, pkt->payload.chat_msg.sender_username, MAX_USERNAME - 1);
-                msg->sender[MAX_USERNAME - 1] = '\0';
-                strncpy(msg->message, pkt->payload.chat_msg.message, 199);
-                msg->message[199] = '\0';
-                msg->timestamp = SDL_GetTicks();
-                msg->player_id = pkt->payload.chat_msg.player_id;
-                msg->is_current_user = (strcmp(msg->sender, my_username) == 0) ? 1 : 0;
-                chat_count++;
-            } else {
-                // Shift array and add new message (FIFO)
-                for (int i = 0; i < MAX_CHAT_MESSAGES - 1; i++) {
-                    chat_history[i] = chat_history[i + 1];
-                }
-                ChatMessage* msg = &chat_history[MAX_CHAT_MESSAGES - 1];
-                strncpy(msg->sender, pkt->payload.chat_msg.sender_username, MAX_USERNAME - 1);
-                msg->sender[MAX_USERNAME - 1] = '\0';
-                strncpy(msg->message, pkt->payload.chat_msg.message, 199);
-                msg->message[199] = '\0';
-                msg->timestamp = SDL_GetTicks();
-                msg->player_id = pkt->payload.chat_msg.player_id;
-                msg->is_current_user = (strcmp(msg->sender, my_username) == 0) ? 1 : 0;
-            }
-            
-            // printf("[CLIENT] Chat - %s: %s\n", pkt->payload.chat_msg.sender_username, pkt->payload.chat_msg.message);
-            break;
-        }
-
-
-
-        case MSG_INVITE_RECEIVED:
-            {
-                current_invite.lobby_id = pkt->payload.invite.lobby_id;
-                strncpy(current_invite.room_name, pkt->payload.invite.room_name, 63);
-                strncpy(current_invite.host_name, pkt->payload.invite.host_name, 31);
-                strncpy(current_invite.access_code, pkt->payload.invite.access_code, 7);
-                current_invite.game_mode = pkt->payload.invite.game_mode;
-                current_invite.is_active = 1;
-
-                snprintf(notification_message, sizeof(notification_message), 
-                        "Game Invite from %s!", current_invite.host_name);
-                notification_time = SDL_GetTicks();
-                printf("[CLIENT] Received invite to Lobby %d from %s (Code: %s)\n", 
-                       current_invite.lobby_id, current_invite.host_name, current_invite.access_code);
-            }
-            break;
-    }
-}
-
-// --- Main Client ---
-
-int main(int argc, char *argv[]) {
-    // Determine session path
-    determine_session_path(argc, argv);
-    
-    // 1. Setup Network
-    sock = socket(AF_INET, SOCK_STREAM, 0);
-    struct sockaddr_in serv_addr;
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons(PORT);
-    // Default to localhost, or use command line argument
-    const char *server_ip = "127.0.0.1";
-    if (argc > 1) {
-        server_ip = argv[1];
-    }
-    
-    if (inet_pton(AF_INET, server_ip, &serv_addr.sin_addr) <= 0) {
-        printf("Invalid address/ Address not supported \n");
-        return -1;
-    }
-    
-    printf("Connecting to %s:%d...\n", server_ip, PORT);
-    
-    if (connect(sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
-        printf("Cannot connect to server at %s:%d\n", server_ip, PORT);
-        return -1;
-    }
-    
-    int flags = fcntl(sock, F_GETFL, 0);
-    fcntl(sock, F_SETFL, flags | O_NONBLOCK);
-    
-    printf("Connected to server!\n");
-    
-    // Auto-Login Attempt
-    char saved_token[64];
-    if (load_session_token(saved_token)) {
-        // printf("[CLIENT] Found saved session token. Attempting auto-login...\n");
-        ClientPacket pkt;
-        memset(&pkt, 0, sizeof(pkt));
-        pkt.type = MSG_LOGIN_WITH_TOKEN;
-        strncpy(pkt.session_token, saved_token, 63);
-        send(sock, &pkt, sizeof(pkt), 0);
-        // Note: We stay on SCREEN_LOGIN until server responds. 
-        // If success -> SCREEN_LOBBY_LIST or SCREEN_GAME (handled in MSG_AUTH_RESPONSE/MSG_GAME_STATE)
-    }
-
-    // 2. Setup SDL - FULLSCREEN 1120x720
+SDL_Window* init_sdl_window(SDL_Renderer** rend) {
     SDL_Init(SDL_INIT_VIDEO);
     TTF_Init();
     SDL_Window *win = SDL_CreateWindow("Bomberman", 
@@ -669,1283 +29,457 @@ int main(int argc, char *argv[]) {
                                        SDL_WINDOWPOS_CENTERED, 
                                        1120, 720, 
                                        SDL_WINDOW_SHOWN);
-    SDL_Renderer *rend = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    *rend = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    
     if (!win) {
         fprintf(stderr, "SDL_CreateWindow failed: %s\n", SDL_GetError());
-        return -1;
+        return NULL;
     }
-
-    if (!rend) {
+    if (!*rend) {
         fprintf(stderr, "SDL_CreateRenderer failed: %s\n", SDL_GetError());
-        return -1;
+        return NULL;
     }
-    // LARGER FONTS for better readability
-    TTF_Font *font_large = TTF_OpenFont("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 64);
-    if (!font_large) {
-        font_large = TTF_OpenFont("C:\\Windows\\Fonts\\arialbd.ttf", 64);
+    return win;
+}
+
+TTF_Font* load_fonts(TTF_Font** font_large, TTF_Font** font_medium) {
+    *font_large = TTF_OpenFont("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 64);
+    if (!*font_large) {
+        *font_large = TTF_OpenFont("C:\\Windows\\Fonts\\arialbd.ttf", 64);
     }
 
-    TTF_Font *font_medium = TTF_OpenFont("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 40);
-    if (!font_medium) {
-        font_medium = TTF_OpenFont("C:\\Windows\\Fonts\\arialbd.ttf", 40);
+    *font_medium = TTF_OpenFont("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 40);
+    if (!*font_medium) {
+        *font_medium = TTF_OpenFont("C:\\Windows\\Fonts\\arialbd.ttf", 40);
     }
 
-    
-    // font_small now uses 26pt (updated in init_font)
     TTF_Font *font_small = init_font();
-    
     if (!font_small) {
         printf("Failed to load font!\n");
-        return -1;
+        return NULL;
+    }
+    return font_small;
+}
+
+void setup_network_and_login(const char *server_ip) {
+    if (connect_to_server(server_ip, PORT) != 0) {
+        fprintf(stderr, "Failed to connect to server\n");
+        running = 0;
+        return;
+    }
+    
+    char saved_token[64];
+    if (load_session_token(saved_token)) {
+        ClientPacket pkt;
+        memset(&pkt, 0, sizeof(pkt));
+        pkt.type = MSG_LOGIN_WITH_TOKEN;
+        strncpy(pkt.session_token, saved_token, 63);
+        send(sock, &pkt, sizeof(pkt), 0);
+    }
+}
+
+void process_network_packets() {
+    ServerPacket spkt;
+    int recv_result;
+    
+    int packets_received = 0;
+    while ((recv_result = receive_server_packet(&spkt)) == 1 && packets_received < 10) {
+        process_server_packet(&spkt);
+        packets_received++;
+    }
+    
+    if (recv_result < 0) {
+        printf("Server disconnected!\n");
+        running = 0;
+    }
+}
+
+void update_error_messages() {
+    if (lobby_error_message[0] != '\0' && SDL_GetTicks() - error_message_time > 3000) {
+        lobby_error_message[0] = '\0';
+    }
+}
+
+void render_current_screen(SDL_Renderer *rend, TTF_Font *font_large, TTF_Font *font_medium, 
+                           TTF_Font *font_small, int mx, int my, int tick) {
+    switch (current_screen) {
+        case SCREEN_LOGIN: {
+            btn_login.is_hovered = is_mouse_inside(btn_login.rect, mx, my);
+            btn_reg.is_hovered = is_mouse_inside(btn_reg.rect, mx, my);
+
+            // Login screen: only show username and password
+            render_login_screen(
+                rend, font_large, font_small,
+                &inp_user, NULL, &inp_pass,
+                &btn_login, &btn_reg, status_message
+            );
+            break;
+        }
+        
+        case SCREEN_REGISTER: {
+            btn_login.is_hovered = is_mouse_inside(btn_login.rect, mx, my);
+            btn_reg.is_hovered = is_mouse_inside(btn_reg.rect, mx, my);
+
+            // Register screen: show all three fields
+            render_login_screen(
+                rend, font_large, font_small,
+                &inp_user, &inp_email, &inp_pass,
+                &btn_login, &btn_reg, status_message
+            );
+            break;
+        }
+
+        case SCREEN_LOBBY_LIST: {
+            // Update hover states ONCE before rendering
+            btn_create.is_hovered = is_mouse_inside(btn_create.rect, mx, my);
+            btn_refresh.is_hovered = is_mouse_inside(btn_refresh.rect, mx, my);
+            btn_friends.is_hovered = is_mouse_inside(btn_friends.rect, mx, my);
+            // btn_quick_play removed
+            // btn_settings removed
+            btn_profile.is_hovered = is_mouse_inside(btn_profile.rect, mx, my);
+            btn_leaderboard.is_hovered = is_mouse_inside(btn_leaderboard.rect, mx, my);
+            btn_logout.is_hovered = is_mouse_inside(btn_logout.rect, mx, my);
+            btn_create_confirm.is_hovered = is_mouse_inside(btn_create_confirm.rect, mx, my);
+            btn_cancel.is_hovered = is_mouse_inside(btn_cancel.rect, mx, my);
+
+            render_lobby_list_screen(
+                rend, font_small,
+                lobby_list, lobby_count,
+                &btn_create, &btn_refresh,
+                selected_lobby_idx
+            );
+            
+            // Draw additional nav buttons - MODERNIZED with rounded corners
+            // Logout button (top left)
+            draw_button(rend, font_small, &btn_logout);
+
+            // Friends button
+            draw_button(rend, font_small, &btn_friends);
+            
+            // Quick Play removed
+            
+            // Settings button removed
+            
+            // Profile & Leaderboard buttons (top right)
+            draw_button(rend, font_small, &btn_profile);
+            draw_button(rend, font_small, &btn_leaderboard);
+            
+            //SDL_RenderPresent(rend);
+            
+            // Render dialog overlay if showing
+            if (show_create_room_dialog) {
+                render_create_room_dialog(rend, font_small, &inp_room_name, &inp_access_code,
+                                            &btn_create_confirm, &btn_cancel);
+                // Draw input fields
+                draw_input_field(rend, font_small, &inp_room_name);
+                draw_input_field(rend, font_small, &inp_access_code);
+                // Draw buttons
+                draw_button(rend, font_small, &btn_create_confirm);
+                draw_button(rend, font_small, &btn_cancel);
+                //SDL_RenderPresent(rend);
+            }
+            
+            // Render join code dialog if showing
+            if (show_join_code_dialog) {
+                render_create_room_dialog(rend, font_small, &inp_join_code, NULL,
+                                            &btn_create_confirm, &btn_cancel);
+                // Change button text
+                strcpy(btn_create_confirm.text, "Join");
+                draw_input_field(rend, font_small, &inp_join_code);
+                draw_button(rend, font_small, &btn_create_confirm);
+                draw_button(rend, font_small, &btn_cancel);
+                //SDL_RenderPresent(rend);
+            }
+            break;
+        }
+
+        case SCREEN_LOBBY_ROOM: {
+            if (my_player_id == current_lobby.host_id) {
+                btn_start.is_hovered = is_mouse_inside(btn_start.rect, mx, my);
+                btn_leave.is_hovered = is_mouse_inside(btn_leave.rect, mx, my);
+                btn_ready.is_hovered = 0;
+            } else {
+                btn_ready.is_hovered = is_mouse_inside(btn_ready.rect, mx, my);
+                btn_leave.is_hovered = is_mouse_inside(btn_leave.rect, mx, my);
+                btn_start.is_hovered = 0;
+            }
+
+            Button *ready_ptr = (my_player_id != current_lobby.host_id) ? &btn_ready : NULL;
+            Button *start_ptr = (my_player_id == current_lobby.host_id) ? &btn_start : NULL;
+
+            render_lobby_room_screen(
+                rend, font_small,
+                &current_lobby, my_player_id,
+                ready_ptr, start_ptr, &btn_leave
+            );
+            
+            // Render chat panel
+            render_chat_panel_room(rend, font_small, chat_history, &inp_chat_message, chat_count);
+            
+            // Invite button
+            if (current_lobby.num_players < 4) {
+                btn_open_invite.is_hovered = is_mouse_inside(btn_open_invite.rect, mx, my);
+                draw_button(rend, font_small, &btn_open_invite);
+            }
+            
+            if (show_invite_overlay) {
+                render_invite_overlay(rend, font_small, friends_list, friends_count, 
+                                        invited_user_ids, invited_count, &btn_close_invite);
+            }
+            break;
+        }
+
+        case SCREEN_GAME: {
+            // Calculate elapsed game time
+            int elapsed_seconds = 0;
+            if (game_start_time > 0) {
+                Uint32 elapsed_ms = SDL_GetTicks() - game_start_time;
+                elapsed_seconds = elapsed_ms / 1000;
+            }
+            render_game(rend, font_small, tick++, my_player_id, elapsed_seconds);
+            break;
+        }
+        
+        case SCREEN_FRIENDS: {
+            Button back_btn;
+            back_btn.is_hovered = is_mouse_inside(back_btn.rect, mx, my);
+            btn_send_friend_request.is_hovered = is_mouse_inside(btn_send_friend_request.rect, mx, my);
+            
+            render_friends_screen(rend, font_small, friends_list, friends_count,
+                                    pending_requests, pending_count,
+                                    sent_requests, sent_count, &back_btn);
+            
+            // Draw friend request input and button
+            draw_input_field(rend, font_small, &inp_friend_request);
+            draw_button(rend, font_small, &btn_send_friend_request);
+            
+            // Draw delete confirmation dialog if active - MODERNIZED
+            if (show_delete_confirm && delete_friend_index >= 0 && delete_friend_index < friends_count) {
+                int win_w, win_h;
+                SDL_GetRendererOutputSize(rend, &win_w, &win_h);
+                
+                // Semi-transparent overlay
+                SDL_SetRenderDrawBlendMode(rend, SDL_BLENDMODE_BLEND);
+                SDL_SetRenderDrawColor(rend, 0, 0, 0, 200);
+                SDL_Rect overlay = {0, 0, win_w, win_h};
+                SDL_RenderFillRect(rend, &overlay);
+                
+                // Modern dialog box with rounded corners
+                SDL_Rect dialog = {250, 250, 300, 150};
+                
+                // Layered shadow
+                draw_layered_shadow(rend, dialog, 12, 6);
+                
+                // Dialog background
+                SDL_Color dialog_bg = {30, 41, 59, 255};
+                draw_rounded_rect(rend, dialog, dialog_bg, 12);
+                
+                // Dialog border
+                SDL_Color border_col = {59, 130, 246, 255};
+                draw_rounded_border(rend, dialog, border_col, 12, 2);
+                
+                // Title
+                SDL_Surface *surf = TTF_RenderText_Blended(font_small, "Delete Friend?", (SDL_Color){255, 255, 255, 255});
+                if (surf) {
+                    SDL_Texture *tex = SDL_CreateTextureFromSurface(rend, surf);
+                    SDL_Rect r = {dialog.x + (dialog.w - surf->w)/2, dialog.y + 20, surf->w, surf->h};
+                    SDL_RenderCopy(rend, tex, NULL, &r);
+                    SDL_DestroyTexture(tex);
+                    SDL_FreeSurface(surf);
+                }
+                
+                // Friend name
+                char msg[128];
+                snprintf(msg, sizeof(msg), "Remove %s?", friends_list[delete_friend_index].display_name);
+                surf = TTF_RenderText_Blended(font_small, msg, (SDL_Color){200, 200, 200, 255});
+                if (surf) {
+                    SDL_Texture *tex = SDL_CreateTextureFromSurface(rend, surf);
+                    SDL_Rect r = {dialog.x + (dialog.w - surf->w)/2, dialog.y + 60, surf->w, surf->h};
+                    SDL_RenderCopy(rend, tex, NULL, &r);
+                    SDL_DestroyTexture(tex);
+                    SDL_FreeSurface(surf);
+                }
+                
+                // Modern Yes button (rounded, red with shadow)
+                SDL_Rect yes_btn = {300, 350, 100, 40};
+                draw_layered_shadow(rend, yes_btn, 6, 3);
+                SDL_Color yes_bg = {239, 68, 68, 255};
+                draw_rounded_rect(rend, yes_btn, yes_bg, 6);
+                
+                surf = TTF_RenderText_Blended(font_small, "Yes", (SDL_Color){255, 255, 255, 255});
+                if (surf) {
+                    SDL_Texture *tex = SDL_CreateTextureFromSurface(rend, surf);
+                    SDL_Rect r = {yes_btn.x + (yes_btn.w - surf->w)/2, yes_btn.y + (yes_btn.h - surf->h)/2, surf->w, surf->h};
+                    SDL_RenderCopy(rend, tex, NULL, &r);
+                    SDL_DestroyTexture(tex);
+                    SDL_FreeSurface(surf);
+                }
+                
+                // Modern No button (rounded, gray with shadow)
+                SDL_Rect no_btn = {420, 350, 100, 40};
+                draw_layered_shadow(rend, no_btn, 6, 3);
+                SDL_Color no_bg = {100, 116, 139, 255};
+                draw_rounded_rect(rend, no_btn, no_bg, 6);
+                
+                surf = TTF_RenderText_Blended(font_small, "No", (SDL_Color){255, 255, 255, 255});
+                if (surf) {
+                    SDL_Texture *tex = SDL_CreateTextureFromSurface(rend, surf);
+                    SDL_Rect r = {no_btn.x + (no_btn.w - surf->w)/2, no_btn.y + (no_btn.h - surf->h)/2, surf->w, surf->h};
+                    SDL_RenderCopy(rend, tex, NULL, &r);
+                    SDL_DestroyTexture(tex);
+                    SDL_FreeSurface(surf);
+                }
+                
+                SDL_SetRenderDrawBlendMode(rend, SDL_BLENDMODE_NONE);
+            }
+            break;
+        }
+        
+        case SCREEN_PROFILE: {
+            Button back_btn;
+            back_btn.is_hovered = is_mouse_inside(back_btn.rect, mx, my);
+            // Determine title based on whether it's our profile or someone else's
+            char p_title[128] = "";
+            if (strcmp(my_profile.username, my_username) != 0 && strlen(my_profile.username) > 0) {
+                    snprintf(p_title, sizeof(p_title), "PROFILE: %s", my_profile.display_name);
+            }
+            render_profile_screen(rend, font_medium, font_small, &my_profile, &back_btn, p_title);
+            break;
+        }
+        
+        case SCREEN_LEADERBOARD: {
+            Button back_btn;
+            back_btn.is_hovered = is_mouse_inside(back_btn.rect, mx, my);
+            render_leaderboard_screen(rend, font_large, font_small, leaderboard, leaderboard_count, &back_btn);
+            break;
+        }
+        
+        // SCREEN_SETTINGS case removed
+        
+        case SCREEN_POST_MATCH: {
+            // Update hover states
+            btn_rematch.is_hovered = is_mouse_inside((SDL_Rect){660, 850, 250, 60}, mx, my);
+            btn_return_lobby.is_hovered = is_mouse_inside((SDL_Rect){930, 850, 250, 60}, mx, my);
+            
+            render_post_match_screen(rend, font_large, font_small,
+                                    post_match_winner_id, post_match_elo_changes,
+                                    post_match_kills, post_match_duration,
+                                    &btn_rematch, &btn_return_lobby,
+                                    &current_state, my_player_id);
+            break;
+        }
+
+        default:
+            break;
+    }
+}
+
+void render_ui_overlays(SDL_Renderer *rend, TTF_Font *font_small, int mx, int my) {
+    // Render notifications
+    if (current_screen != SCREEN_LOGIN &&
+        current_screen != SCREEN_REGISTER &&
+        notification_message[0] != '\0' &&
+        SDL_GetTicks() - notification_time < NOTIFICATION_DURATION) {
+        int win_w, win_h;
+        SDL_GetRendererOutputSize(rend, &win_w, &win_h);
+        
+        SDL_Surface *notif = TTF_RenderText_Blended(font_small, notification_message, (SDL_Color){255, 255, 255, 255});
+        if (notif) {
+            int box_w = notif->w + 40;
+            int box_h = notif->h + 20;
+            int box_x = (win_w - box_w) / 2;
+            int box_y = 20;
+            
+            SDL_Rect bg = {box_x, box_y, box_w, box_h};
+            
+            draw_layered_shadow(rend, bg, 8, 4);
+            
+            SDL_Color notif_bg = {59, 130, 246, 230};
+            SDL_SetRenderDrawBlendMode(rend, SDL_BLENDMODE_BLEND);
+            draw_rounded_rect(rend, bg, notif_bg, 8);
+            
+            SDL_Color notif_border = {96, 165, 250, 255};
+            draw_rounded_border(rend, bg, notif_border, 8, 2);
+            SDL_SetRenderDrawBlendMode(rend, SDL_BLENDMODE_NONE);
+            
+            SDL_Texture *tex = SDL_CreateTextureFromSurface(rend, notif);
+            SDL_Rect text_rect = {box_x + 20, box_y + 10, notif->w, notif->h};
+            SDL_RenderCopy(rend, tex, NULL, &text_rect);
+            SDL_DestroyTexture(tex);
+            SDL_FreeSurface(notif);
+        }
+    } else if (SDL_GetTicks() - notification_time >= NOTIFICATION_DURATION) {
+        notification_message[0] = '\0';
     }
 
+    // Global Invite Popup
+    if (current_invite.is_active) {
+        btn_invite_accept.is_hovered = is_mouse_inside(btn_invite_accept.rect, mx, my);
+        btn_invite_decline.is_hovered = is_mouse_inside(btn_invite_decline.rect, mx, my);
+        render_invitation_popup(rend, font_small, &current_invite, &btn_invite_accept, &btn_invite_decline);
+    }
+}
+
+void cleanup_resources(SDL_Window *win, SDL_Renderer *rend, TTF_Font *font_large, 
+                       TTF_Font *font_medium, TTF_Font *font_small) {
+    close(sock);
+    SDL_DestroyRenderer(rend);
+    SDL_DestroyWindow(win);
+    if (font_large) TTF_CloseFont(font_large);
+    if (font_medium) TTF_CloseFont(font_medium);
+    if (font_small) TTF_CloseFont(font_small);
+    TTF_Quit();
+    SDL_Quit();
+}
+
+/* ===== MAIN ENTRY POINT ===== */
+
+int main(int argc, char *argv[]) {
+    // Setup
+    determine_session_path(argc, argv);
+    const char *server_ip = (argc > 1) ? argv[1] : "127.0.0.1";
+    
+    setup_network_and_login(server_ip);
+    if (!running) return -1;
+    
+    SDL_Renderer *rend = NULL;
+    SDL_Window *win = init_sdl_window(&rend);
+    if (!win) return -1;
+    
+    TTF_Font *font_large = NULL;
+    TTF_Font *font_medium = NULL;
+    TTF_Font *font_small = load_fonts(&font_large, &font_medium);
+    if (!font_small) return -1;
+    
     SDL_StartTextInput();
-    int running = 1;
     int tick = 0;
 
+    // Main loop
     while (running) {
         SDL_Event e;
         int mx, my;
         SDL_GetMouseState(&mx, &my);
 
-        // --- Event Handling ---
+        // 1. Handle events
         while (SDL_PollEvent(&e)) {
-            if (e.type == SDL_QUIT) running = 0;
-
-            if (current_invite.is_active && e.type == SDL_MOUSEBUTTONDOWN) {
-                // Global Invite Handler - Priority 1
-                // Calculate expected button positions dynamically
-                int win_w, win_h;
-                SDL_GetRendererOutputSize(rend, &win_w, &win_h);
-                int box_w = 400;
-                int box_h = 250;
-                int box_x = (win_w - box_w) / 2;
-                int box_y = (win_h - box_h) / 2;
-
-                btn_invite_accept.rect.x = box_x + 40;
-                btn_invite_accept.rect.y = box_y + 180;
-                btn_invite_decline.rect.x = box_x + 210;
-                btn_invite_decline.rect.y = box_y + 180;
-
-                printf("[DEBUG] Click at %d,%d. Accept Rect: %d,%d %dx%d. Decline Rect: %d,%d %dx%d\n",
-                       mx, my, 
-                       btn_invite_accept.rect.x, btn_invite_accept.rect.y, btn_invite_accept.rect.w, btn_invite_accept.rect.h,
-                       btn_invite_decline.rect.x, btn_invite_decline.rect.y, btn_invite_decline.rect.w, btn_invite_decline.rect.h);
-
-                if (is_mouse_inside(btn_invite_accept.rect, mx, my)) {
-                    printf("[DEBUG] Accepted!\n");
-                    if (my_player_id != -1) {
-                        send_packet(MSG_LEAVE_LOBBY, 0);
-                    }
-                    
-                    ClientPacket pkt;
-                    memset(&pkt, 0, sizeof(pkt));
-                    pkt.type = MSG_JOIN_LOBBY;
-                    pkt.lobby_id = current_invite.lobby_id;
-                    strncpy(pkt.access_code, current_invite.access_code, 7);
-                    send(sock, &pkt, sizeof(pkt), 0);
-                    
-                    current_invite.is_active = 0;
-                    show_invite_overlay = 0;
-                }
-                else if (is_mouse_inside(btn_invite_decline.rect, mx, my)) {
-                    printf("[DEBUG] Declined!\n");
-                    current_invite.is_active = 0;
-                }
-                // Consume the event!
-                continue;
-            }
-
-            switch (current_screen) {
-                case SCREEN_LOGIN:
-                    if (e.type == SDL_MOUSEBUTTONDOWN) {
-                        inp_user.is_active = is_mouse_inside(inp_user.rect, mx, my);
-                        inp_pass.is_active = is_mouse_inside(inp_pass.rect, mx, my);
-                        
-                        if (is_mouse_inside(btn_login.rect, mx, my)) {
-                            if (strlen(inp_user.text) > 0 && strlen(inp_pass.text) > 0) {
-                                ClientPacket pkt;
-                                memset(&pkt, 0, sizeof(pkt));
-                                pkt.type = MSG_LOGIN;
-                                strcpy(pkt.username, inp_user.text);
-                                strcpy(pkt.password, inp_pass.text);
-                                send(sock, &pkt, sizeof(pkt), 0);
-                            } else {
-                                strncpy(status_message, "Please enter username and password", sizeof(status_message));
-                            }
-                        }
-                        
-                        if (is_mouse_inside(btn_reg.rect, mx, my)) {
-                            // Switch to registration screen
-                            current_screen = SCREEN_REGISTER;
-                            inp_user.text[0] = '\0';
-                            inp_email.text[0] = '\0';
-                            inp_pass.text[0] = '\0';
-                            inp_user.is_active = 1;
-                            inp_email.is_active = 0;
-                            inp_pass.is_active = 0;
-                            status_message[0] = '\0';
-                        }
-                    }
-                    
-                    if (e.type == SDL_TEXTINPUT) {
-                        if (inp_user.is_active) handle_text_input(&inp_user, e.text.text[0]);
-                        if (inp_pass.is_active) handle_text_input(&inp_pass, e.text.text[0]);
-                    }
-                    
-                    if (e.type == SDL_KEYDOWN) {
-                        if (e.key.keysym.sym == SDLK_BACKSPACE) {
-                            if (inp_user.is_active) handle_text_input(&inp_user, '\b');
-                            if (inp_pass.is_active) handle_text_input(&inp_pass, '\b');
-                        }
-                        if (e.key.keysym.sym == SDLK_RETURN || e.key.keysym.sym == SDLK_KP_ENTER) {
-                            if (strlen(inp_user.text) > 0 && strlen(inp_pass.text) > 0) {
-                                ClientPacket pkt;
-                                memset(&pkt, 0, sizeof(pkt));
-                                pkt.type = MSG_LOGIN;
-                                strcpy(pkt.username, inp_user.text);
-                                strcpy(pkt.password, inp_pass.text);
-                                send(sock, &pkt, sizeof(pkt), 0);
-                            }
-                        }
-                        if (e.key.keysym.sym == SDLK_TAB) {
-                            if (inp_user.is_active) {
-                                inp_user.is_active = 0;
-                                inp_pass.is_active = 1;
-                            } else if (inp_pass.is_active) {
-                                inp_pass.is_active = 0;
-                                inp_user.is_active = 1;
-                            } else {
-                                inp_user.is_active = 1;
-                            }
-                        }
-                    }
-                    break;
-                    
-                case SCREEN_REGISTER:
-                    if (e.type == SDL_MOUSEBUTTONDOWN) {
-                        inp_user.is_active = is_mouse_inside(inp_user.rect, mx, my);
-                        inp_email.is_active = is_mouse_inside(inp_email.rect, mx, my);
-                        inp_pass.is_active = is_mouse_inside(inp_pass.rect, mx, my);
-                        
-                        if (is_mouse_inside(btn_reg.rect, mx, my)) {
-                            if (strlen(inp_user.text) > 0 && strlen(inp_email.text) > 0 && strlen(inp_pass.text) > 0) {
-                                ClientPacket pkt;
-                                memset(&pkt, 0, sizeof(pkt));
-                                pkt.type = MSG_REGISTER;
-                                strcpy(pkt.username, inp_user.text);
-                                strcpy(pkt.email, inp_email.text);
-                                strcpy(pkt.password, inp_pass.text);
-                                send(sock, &pkt, sizeof(pkt), 0);
-                            } else {
-                                strncpy(status_message, "Please fill all fields", sizeof(status_message));
-                            }
-                        }
-                        
-                        if (is_mouse_inside(btn_login.rect, mx, my)) {
-                            // Back to login screen
-                            current_screen = SCREEN_LOGIN;
-                            inp_user.text[0] = '\0';
-                            inp_email.text[0] = '\0';
-                            inp_pass.text[0] = '\0';
-                            inp_user.is_active = 1;
-                            inp_email.is_active = 0;
-                            inp_pass.is_active = 0;
-                            status_message[0] = '\0';
-                        }
-                    }
-                    
-                    if (e.type == SDL_TEXTINPUT) {
-                        if (inp_user.is_active) handle_text_input(&inp_user, e.text.text[0]);
-                        if (inp_email.is_active) handle_text_input(&inp_email, e.text.text[0]);
-                        if (inp_pass.is_active) handle_text_input(&inp_pass, e.text.text[0]);
-                    }
-                    
-                    if (e.type == SDL_KEYDOWN) {
-                        if (e.key.keysym.sym == SDLK_BACKSPACE) {
-                            if (inp_user.is_active) handle_text_input(&inp_user, '\b');
-                            if (inp_email.is_active) handle_text_input(&inp_email, '\b');
-                            if (inp_pass.is_active) handle_text_input(&inp_pass, '\b');
-                        }
-                        
-                        if (e.key.keysym.sym == SDLK_TAB) {
-                            if (inp_user.is_active) {
-                                inp_user.is_active = 0;
-                                inp_email.is_active = 1;
-                            } else if (inp_email.is_active) {
-                                inp_email.is_active = 0;
-                                inp_pass.is_active = 1;
-                            } else if (inp_pass.is_active) {
-                                inp_pass.is_active = 0;
-                                inp_user.is_active = 1;
-                            } else {
-                                inp_user.is_active = 1;
-                            }
-                        }
-                    }
-                    break;
-                    
-                case SCREEN_LOBBY_LIST:
-                    // --- 1. DIALOG HANDLING (Priority) ---
-                    if (show_create_room_dialog) {
-                        if (e.type == SDL_MOUSEBUTTONDOWN) {
-                            inp_room_name.is_active = is_mouse_inside(inp_room_name.rect, mx, my);
-                            inp_access_code.is_active = is_mouse_inside(inp_access_code.rect, mx, my);
-                            
-                            // Game mode buttons
-                            int win_w, win_h;
-                            SDL_GetRendererOutputSize(rend, &win_w, &win_h);
-                            int dialog_w = 700;
-                            int dialog_h = 650;
-                            int dialog_x = (win_w - dialog_w) / 2;
-                            int dialog_y = (win_h - dialog_h) / 2;
-                            int mode_y = dialog_y + 390;
-                            int btn_width = 180;
-                            int btn_spacing = 20;
-                            
-                            for (int i = 0; i < 3; i++) {
-                                int btn_x = dialog_x + 75 + i * (btn_width + btn_spacing);
-                                SDL_Rect mode_btn = {btn_x, mode_y, btn_width, 50};
-                                if (is_mouse_inside(mode_btn, mx, my)) {
-                                    selected_game_mode = i;
-                                    printf("[CLIENT] Selected game mode: %d\n", selected_game_mode);
-                                    break;
-                                }
-                            }
-                            
-                            // Random button
-                            SDL_Rect btn_random = {inp_access_code.rect.x + inp_access_code.rect.w + 10, 
-                                                  inp_access_code.rect.y, 80, inp_access_code.rect.h};
-                            if (is_mouse_inside(btn_random, mx, my)) {
-                                int random_code = 100000 + (rand() % 900000);
-                                snprintf(inp_access_code.text, sizeof(inp_access_code.text), "%d", random_code);
-                            }
-                            
-                            if (is_mouse_inside(btn_create_confirm.rect, mx, my)) {
-                                int code_len = strlen(inp_access_code.text);
-                                int is_valid = 1;
-                                char error_msg[128] = "";
-                                
-                                if (code_len > 0) {
-                                    if (code_len != 6) {
-                                        is_valid = 0;
-                                        snprintf(error_msg, sizeof(error_msg), 
-                                                "Access code must be exactly 6 digits! (Currently: %d)", code_len);
-                                    } else {
-                                        for (int i = 0; i < code_len; i++) {
-                                            if (inp_access_code.text[i] < '0' || inp_access_code.text[i] > '9') {
-                                                is_valid = 0;
-                                                strcpy(error_msg, "Access code must contain only numbers!");
-                                                break;
-                                            }
-                                        }
-                                    }
-                                }
-                                
-                                if (is_valid) {
-                                    ClientPacket pkt;
-                                    memset(&pkt, 0, sizeof(pkt));
-                                    pkt.type = MSG_CREATE_LOBBY;
-                                    strncpy(pkt.room_name, inp_room_name.text, MAX_ROOM_NAME - 1);
-                                    pkt.is_private = (code_len == 6) ? 1 : 0;
-                                    pkt.game_mode = selected_game_mode;
-                                    if (pkt.is_private) {
-                                        strncpy(pkt.access_code, inp_access_code.text, 7);
-                                    }
-                                    send(sock, &pkt, sizeof(pkt), 0);
-                                    show_create_room_dialog = 0;
-                                } else {
-                                    snprintf(notification_message, sizeof(notification_message), "%s", error_msg);
-                                    notification_time = SDL_GetTicks();
-                                }
-                            }
-                            if (is_mouse_inside(btn_cancel.rect, mx, my)) {
-                                show_create_room_dialog = 0;
-                            }
-                        }
-                        
-                        if (e.type == SDL_TEXTINPUT) {
-                            if (inp_room_name.is_active) handle_text_input(&inp_room_name, e.text.text[0]);
-                            if (inp_access_code.is_active && e.text.text[0] >= '0' && e.text.text[0] <= '9') {
-                                handle_text_input(&inp_access_code, e.text.text[0]);
-                            }
-                        }
-                        
-                        if (e.type == SDL_KEYDOWN) {
-                            if (e.key.keysym.sym == SDLK_BACKSPACE) {
-                                if (inp_room_name.is_active) handle_text_input(&inp_room_name, '\b');
-                                if (inp_access_code.is_active) handle_text_input(&inp_access_code, '\b');
-                            }
-                            if (e.key.keysym.sym == SDLK_ESCAPE) show_create_room_dialog = 0;
-                        }
-                        // Consume all events when dialog is open
-                        continue; 
-                    }
-
-                    if (show_join_code_dialog) {
-                        if (e.type == SDL_MOUSEBUTTONDOWN) {
-                            inp_join_code.is_active = is_mouse_inside(inp_join_code.rect, mx, my);
-                            
-                            if (is_mouse_inside(btn_create_confirm.rect, mx, my)) {
-                                if (strlen(inp_join_code.text) == 6) {
-                                    ClientPacket pkt;
-                                    memset(&pkt, 0, sizeof(pkt));
-                                    pkt.type = MSG_JOIN_LOBBY;
-                                    pkt.lobby_id = selected_private_lobby_id;
-                                    strncpy(pkt.access_code, inp_join_code.text, 7);
-                                    send(sock, &pkt, sizeof(pkt), 0);
-                                    show_join_code_dialog = 0;
-                                }
-                            }
-                            if (is_mouse_inside(btn_cancel.rect, mx, my)) {
-                                show_join_code_dialog = 0;
-                            }
-                        }
-                        
-                        if (e.type == SDL_TEXTINPUT && inp_join_code.is_active) {
-                            if (e.text.text[0] >= '0' && e.text.text[0] <= '9') {
-                                handle_text_input(&inp_join_code, e.text.text[0]);
-                            }
-                        }
-                        
-                        if (e.type == SDL_KEYDOWN) {
-                            if (e.key.keysym.sym == SDLK_BACKSPACE && inp_join_code.is_active) {
-                                handle_text_input(&inp_join_code, '\b');
-                            }
-                            if (e.key.keysym.sym == SDLK_ESCAPE) show_join_code_dialog = 0;
-                        }
-                        // Consume all events when dialog is open
-                        continue;
-                    }
-
-                    // --- 2. MAIN LOBBY LIST HANDLING (Only if no dialogs) ---
-                    if (e.type == SDL_MOUSEBUTTONDOWN) {
-                        if (is_mouse_inside(btn_create.rect, mx, my)) {
-                            // Show create room dialog
-                            show_create_room_dialog = 1;
-                            snprintf(inp_room_name.text, sizeof(inp_room_name.text), "Room %d", lobby_count + 1);
-                            inp_access_code.text[0] = '\0';
-                            inp_room_name.is_active = 1;
-                            inp_access_code.is_active = 0;
-                        }
-                        if (is_mouse_inside(btn_refresh.rect, mx, my)) {
-                            send_packet(MSG_LIST_LOBBIES, 0);
-                        }
-                        if (is_mouse_inside(btn_friends.rect, mx, my)) {
-                            send_packet(MSG_FRIEND_LIST, 0);
-                            current_screen = SCREEN_FRIENDS;
-                        }
-                        if (is_mouse_inside(btn_profile.rect, mx, my)) {
-                            send_packet(MSG_GET_PROFILE, 0);
-                            current_screen = SCREEN_PROFILE;
-                        }
-                        if (is_mouse_inside(btn_leaderboard.rect, mx, my)) {
-                            send_packet(MSG_GET_LEADERBOARD, 0);
-                            current_screen = SCREEN_LEADERBOARD;
-                        }
-                        if (is_mouse_inside(btn_profile.rect, mx, my)) {
-                            send_packet(MSG_GET_PROFILE, 0);
-                            current_screen = SCREEN_PROFILE;
-                        }
-                        if (is_mouse_inside(btn_leaderboard.rect, mx, my)) {
-                            send_packet(MSG_GET_LEADERBOARD, 0);
-                            current_screen = SCREEN_LEADERBOARD;
-                        }
-                        // Quick Play removed
-                        // Settings removed
-                        if (is_mouse_inside(btn_logout.rect, mx, my)) {
-                            clear_session_token();
-                            current_screen = SCREEN_LOGIN;
-                            status_message[0] = '\0';
-                            inp_user.text[0] = '\0';
-                            inp_pass.text[0] = '\0';
-                        }
-                        
-                        // Lobby click detection - Updated for new button layout
-                        int y = 120; // Fixed from top
-                        // FIXED lobby cards for 1120x720 (Must match ui_screens.c)
-                        int list_width = 740;  
-                        int card_height = 80;  
-                        int win_w;
-                        SDL_GetRendererOutputSize(rend, &win_w, NULL);
-                        int start_x = (win_w - list_width) / 2;
-                        
-                        for (int i = 0; i < lobby_count; i++) {
-                            // Calculate button positions relative to card (must match ui_screens.c)
-                            int btn_y = y + 20;
-                            int btn_h = 40;
-                            
-                            // Join Button Rect
-                            SDL_Rect join_rect = {start_x + list_width - 200, btn_y, 90, btn_h};
-                            
-                            // Spectate Button Rect
-                            SDL_Rect spectate_rect = {start_x + list_width - 100, btn_y, 90, btn_h};
-
-                            // JOIN CLICK
-                            if (is_mouse_inside(join_rect, mx, my)) {
-                                if (lobby_list[i].status == LOBBY_PLAYING) {
-                                    // Disabled - do nothing
-                                } else {
-                                    // Join Logic
-                                    if (lobby_list[i].is_private) {
-                                        selected_private_lobby_id = lobby_list[i].id;
-                                        show_join_code_dialog = 1;
-                                        inp_join_code.text[0] = '\0';
-                                        inp_join_code.is_active = 1;
-                                    } else {
-                                        ClientPacket pkt;
-                                        memset(&pkt, 0, sizeof(pkt));
-                                        pkt.type = MSG_JOIN_LOBBY;
-                                        pkt.lobby_id = lobby_list[i].id;
-                                        pkt.access_code[0] = '\0';
-                                        send(sock, &pkt, sizeof(pkt), 0);
-                                    }
-                                }
-                                selected_lobby_idx = i; // Optionally select it
-                                break; 
-                            }
-                            
-                            // SPECTATE CLICK
-                            if (is_mouse_inside(spectate_rect, mx, my)) {
-                                ClientPacket pkt;
-                                memset(&pkt, 0, sizeof(pkt));
-                                pkt.type = MSG_SPECTATE;
-                                pkt.lobby_id = lobby_list[i].id;
-                                send(sock, &pkt, sizeof(pkt), 0);
-                                
-                                selected_lobby_idx = i;
-                                break;
-                            }
-                            
-                            // Keep card selection if clicking elsewhere on card?
-                            // Optional: allows selecting without joining
-                            SDL_Rect card_rect = {start_x, y, list_width, card_height};
-                            if (is_mouse_inside(card_rect, mx, my)) {
-                                selected_lobby_idx = i;
-                            }
-                            
-                            y += card_height + 10; 
-                        }
-                    }
-                    break;
-                    
-                case SCREEN_LOBBY_ROOM:
-                    if (e.type == SDL_MOUSEBUTTONDOWN) {
-                        // LAYER 2: Invite Friends Overlay
-                        if (show_invite_overlay) {
-                            if (is_mouse_inside(btn_close_invite.rect, mx, my)) {
-                                show_invite_overlay = 0;
-                            }
-                            
-                            // Check clicks on friend list "Invite" buttons
-                            // Calculated same way as render_invite_overlay
-                            int win_w, win_h;
-                            SDL_GetRendererOutputSize(rend, &win_w, &win_h);
-                            int overlay_w = 500, overlay_h = 500;
-                            int overlay_x = (win_w - overlay_w) / 2;
-                            int overlay_y = 110;
-                            int list_y = overlay_y + 80;
-                            int btn_w = 100, btn_h = 40;
-                            
-                            // Iterate only online friends
-                            int displayed_count = 0;
-                            for (int i = 0; i < friends_count; i++) {
-                                if (friends_list[i].is_online) {
-                                    if (displayed_count < 6) { // Page limit
-                                        SDL_Rect invite_btn = {
-                                            overlay_x + overlay_w - btn_w - 40,
-                                            list_y + (displayed_count * 60) + 10,
-                                            btn_w, btn_h
-                                        };
-                                        
-                                        if (is_mouse_inside(invite_btn, mx, my)) {
-                                            // Check if already invited
-                                            int already_invited = 0;
-                                            for(int k=0; k<invited_count; k++) {
-                                                if(invited_user_ids[k] == friends_list[i].user_id) already_invited = 1;
-                                            }
-                                            
-                                            if (!already_invited) {
-                                                // Send Invite
-                                                ClientPacket pkt;
-                                                memset(&pkt, 0, sizeof(pkt));
-                                                pkt.type = MSG_FRIEND_INVITE;
-                                                strncpy(pkt.target_display_name, friends_list[i].display_name, MAX_DISPLAY_NAME-1);
-                                                pkt.target_user_id = friends_list[i].user_id; // Use ID for lookup
-                                                send(sock, &pkt, sizeof(pkt), 0);
-                                                
-                                                // Track invited user locally
-                                                if(invited_count < 50) {
-                                                    invited_user_ids[invited_count++] = friends_list[i].user_id;
-                                                }
-                                            }
-                                        }
-                                        displayed_count++;
-                                    }
-                                }
-                            }
-                            
-                            // BLOCK underlying lobby inputs
-                            break;
-                        }
-
-                        // LAYER 3: Normal Lobby Room Controls
-                        // Invite Button
-                        if (current_lobby.num_players < 4) {
-                             if (is_mouse_inside(btn_open_invite.rect, mx, my)) {
-                                show_invite_overlay = 1;
-                                invited_count = 0; // Reset session tracking
-                                send_packet(MSG_FRIEND_LIST, 0); // Refresh friends
-                                break;
-                             }
-                        }
-
-                        // Check Start/Ready buttons FIRST (highest priority)
-                        if (my_player_id == current_lobby.host_id) {
-                            if (is_mouse_inside(btn_start.rect, mx, my)) {
-                                if (current_lobby.num_players < 2) {
-                                    strncpy(lobby_error_message, "Need at least 2 players to start!", 
-                                           sizeof(lobby_error_message));
-                                    error_message_time = SDL_GetTicks();
-                                } else if (!all_players_ready(&current_lobby)) {
-                                    strncpy(lobby_error_message, "All players must be ready!", 
-                                           sizeof(lobby_error_message));
-                                    error_message_time = SDL_GetTicks();
-                                } else {
-                                    send_packet(MSG_START_GAME, 0);
-                                    lobby_error_message[0] = '\0';
-                                }
-                            }
-                        } else if (is_mouse_inside(btn_ready.rect, mx, my)) {
-                            send_packet(MSG_READY, 0);
-                        }
-                        
-                        // Leave button
-                        if (is_mouse_inside(btn_leave.rect, mx, my)) {
-                            send_packet(MSG_LEAVE_LOBBY, 0);
-                            current_screen = SCREEN_LOBBY_LIST;
-                            current_lobby.id = -1; // Reset lobby ID to prevent state pollution
-                            send_packet(MSG_LIST_LOBBIES, 0);
-                            lobby_error_message[0] = '\0';
-                        }
-                        // Leave button
-                        
-                        // Chat input field click (activate for typing)
-                        if (is_mouse_inside((SDL_Rect){610, 632, 340, 38}, mx, my)) {
-                            inp_chat_message.is_active = 1;
-                        }
-                        
-                        // Chat send button click
-                        else if (is_mouse_inside((SDL_Rect){958, 632, 75, 38}, mx, my)) {
-                            if (strlen(inp_chat_message.text) > 0) {
-                                ClientPacket pkt;
-                                memset(&pkt, 0, sizeof(pkt));
-                                pkt.type = MSG_CHAT;
-                                strncpy(pkt.chat_message, inp_chat_message.text, 199);
-                                send(sock, &pkt, sizeof(pkt), 0);
-                                inp_chat_message.text[0] = '\0';  // Clear input
-                                inp_chat_message.is_active = 0;
-                            }
-                        }
-                        // Kick buttons (host only, check for each player)
-                        else if (my_player_id == current_lobby.host_id) {
-                            int card_y = 120;
-                            int card_width = 440;
-                            int start_x = 80;
-                            
-                            for (int i = 0; i < current_lobby.num_players; i++) {
-                                if (i != current_lobby.host_id) {
-                                    SDL_Rect kick_btn = {start_x + 180, card_y + 26, 90, 28};
-                                    if (is_mouse_inside(kick_btn, mx, my)) {
-                                        // Kick player - show notification (backend not implemented)
-                                        snprintf(notification_message, sizeof(notification_message),
-                                                "Kick player feature coming soon!");
-                                        notification_time = SDL_GetTicks();
-                                        break;
-                                    }
-                                }
-                                card_y += 95;
-                            }
-                        }
-                    }
-                    
-                    // Chat text input handling
-                    if (e.type == SDL_TEXTINPUT && inp_chat_message.is_active) {
-                        handle_text_input(&inp_chat_message, e.text.text[0]);
-                    }
-                    
-                    // Chat keyboard handling  
-                    if (e.type == SDL_KEYDOWN && inp_chat_message.is_active) {
-                        if (e.key.keysym.sym == SDLK_BACKSPACE) {
-                            handle_text_input(&inp_chat_message, '\b');
-                        }
-                        else if (e.key.keysym.sym == SDLK_RETURN && strlen(inp_chat_message.text) > 0) {
-                            // Send chat message on Enter
-                            ClientPacket pkt;
-                            memset(&pkt, 0, sizeof(pkt));
-                            pkt.type = MSG_CHAT;
-                            strncpy(pkt.chat_message, inp_chat_message.text, 199);
-                            send(sock, &pkt, sizeof(pkt), 0);
-                            inp_chat_message.text[0] = '\0';  // Clear
-                            inp_chat_message.is_active = 0;
-                        }
-                        else if (e.key.keysym.sym == SDLK_ESCAPE) {
-                            inp_chat_message.is_active = 0;  // Cancel typing
-                        }
-                    }
-                    break;
-                    
-                case SCREEN_GAME:
-                    if (e.type == SDL_MOUSEBUTTONDOWN) {
-                        SDL_Rect leave_btn = get_game_leave_button_rect();
-                        if (is_mouse_inside(leave_btn, mx, my)) {
-                            send_packet(MSG_LEAVE_GAME, 0);
-                            current_screen = SCREEN_LOBBY_LIST;
-                            send_packet(MSG_LIST_LOBBIES, 0);
-                            lobby_error_message[0] = '\0';
-                            my_player_id = -1;
-                            break;
-                        }
-                    }
-
-                    if (e.type == SDL_KEYDOWN) {
-                        if (e.key.keysym.sym == SDLK_ESCAPE) {
-                            send_packet(MSG_LEAVE_GAME, 0);
-                            current_screen = SCREEN_LOBBY_LIST;
-                            send_packet(MSG_LIST_LOBBIES, 0);
-                            lobby_error_message[0] = '\0';
-                            my_player_id = -1;
-                            break;
-                        }
-
-                        ClientPacket pkt;
-                        memset(&pkt, 0, sizeof(pkt));
-                        pkt.type = MSG_MOVE;
-                        pkt.data = -1;
-                        
-                        int key = e.key.keysym.sym;
-                        if (key == SDLK_w || key == SDLK_UP) pkt.data = MOVE_UP;
-                        else if (key == SDLK_s || key == SDLK_DOWN) pkt.data = MOVE_DOWN;
-                        else if (key == SDLK_a || key == SDLK_LEFT) pkt.data = MOVE_LEFT;
-                        else if (key == SDLK_d || key == SDLK_RIGHT) pkt.data = MOVE_RIGHT;
-                        else if (key == SDLK_SPACE) {
-                            pkt.type = MSG_PLANT_BOMB;
-                            pkt.data = 0;
-                        }
-                        
-                        if (pkt.data >= 0 || pkt.type == MSG_PLANT_BOMB) {
-                            send(sock, &pkt, sizeof(pkt), 0);
-                        }
-                    }
-                    break;
-                
-                case SCREEN_POST_MATCH:
-                    if (e.type == SDL_MOUSEBUTTONDOWN) {
-                        // Post-match screen buttons - USE DYNAMIC RECTS
-                        if (is_mouse_inside(btn_rematch.rect, mx, my)) {
-                            // Rematch - return to lobby room for another game
-                            current_screen = SCREEN_LOBBY_ROOM;
-                            post_match_shown = 0;
-                        }
-                        if (is_mouse_inside(btn_return_lobby.rect, mx, my)) {
-                            if (my_player_id == -1) {
-                                // Spectator: Leave lobby and return to list
-                                send_packet(MSG_LEAVE_LOBBY, 0);
-                                current_screen = SCREEN_LOBBY_LIST;
-                                send_packet(MSG_LIST_LOBBIES, 0);
-                                lobby_error_message[0] = '\0';
-                            } else {
-                                // Player: Back to Room - Actually we want to "Return to Lobby LIST" 
-                                // because the user is "stuck" otherwise.
-                                // ORIGINAL BUG: "Return to Lobby" kept user in room (SCREEN_LOBBY_ROOM). 
-                                // FIX: Send LEAVE_LOBBY and go to SCREEN_LOBBY_LIST
-                                send_packet(MSG_LEAVE_LOBBY, 0);
-                                current_screen = SCREEN_LOBBY_LIST;
-                                send_packet(MSG_LIST_LOBBIES, 0);
-                            }
-                            post_match_shown = 0;
-                        }
-                    }
-                    break;
-                    
-                case SCREEN_FRIENDS: {
-                    /* ===== DELETE CONFIRM ===== */
-                    if (show_delete_confirm) {
-                        if (e.type == SDL_MOUSEBUTTONDOWN) {
-                            SDL_Rect yes_btn = {300, 350, 100, 40};
-                            SDL_Rect no_btn  = {420, 350, 100, 40};
-
-                            if (is_mouse_inside(yes_btn, mx, my)) {
-                                if (delete_friend_index >= 0 &&
-                                    delete_friend_index < friends_count) {
-
-                                    ClientPacket pkt;
-                                    memset(&pkt, 0, sizeof(pkt));
-                                    pkt.type = MSG_FRIEND_REMOVE;
-                                    pkt.target_user_id =
-                                        friends_list[delete_friend_index].user_id;
-                                    send(sock, &pkt, sizeof(pkt), 0);
-
-                                    send_packet(MSG_FRIEND_LIST, 0);
-
-                                    snprintf(notification_message,
-                                            sizeof(notification_message),
-                                            "Removed %s from friends",
-                                            friends_list[delete_friend_index].display_name);
-                                    notification_time = SDL_GetTicks();
-                                }
-                                show_delete_confirm = 0;
-                                delete_friend_index = -1;
-                            }
-
-                            if (is_mouse_inside(no_btn, mx, my)) {
-                                show_delete_confirm = 0;
-                                delete_friend_index = -1;
-                            }
-                        }
-
-                        if (e.type == SDL_KEYDOWN &&
-                            e.key.keysym.sym == SDLK_ESCAPE) {
-                            show_delete_confirm = 0;
-                            delete_friend_index = -1;
-                        }
-                        break;
-                    }
-
-                    /* ===== MOUSE CLICK ===== */
-                    if (e.type == SDL_MOUSEBUTTONDOWN) {
-
-                        inp_friend_request.is_active = is_mouse_inside(inp_friend_request.rect, mx, my);
-
-                        /* ===== FRIEND LIST ===== */
-                        int list_y = 134 + 46;
-                        int card_width = 360;
-
-                        for (int i = 0; i < friends_count && i < 5; i++) {
-                            SDL_Rect card = {80, list_y, card_width, 100};
-                            SDL_Rect remove_btn = {
-                                card.x + card.w - 70,
-                                list_y + 38,
-                                50, 35
-                            };
-
-                            if (is_mouse_inside(remove_btn, mx, my)) {
-                                show_delete_confirm = 1;
-                                delete_friend_index = i;
-                                break;
-                            }
-
-                            if (is_mouse_inside(card, mx, my)) {
-                                ClientPacket pkt;
-                                memset(&pkt, 0, sizeof(pkt));
-                                pkt.type = MSG_GET_PROFILE;
-                                pkt.target_user_id = friends_list[i].user_id;
-                                send(sock, &pkt, sizeof(pkt), 0);
-                                current_screen = SCREEN_PROFILE;
-                                break;
-                            }
-
-                            list_y += 110;
-                        }
-
-                        /* ===== PENDING REQUESTS ===== */
-                        int pending_x = 480;
-                        int pending_y = 134 + 46;
-
-                        for (int i = 0; i < pending_count && i < 5; i++) {
-                            SDL_Rect accept_btn  =
-                                {pending_x + 40,  pending_y + 55, 90, 35};
-                            SDL_Rect decline_btn =
-                                {pending_x + 150, pending_y + 55, 90, 35};
-
-                            if (is_mouse_inside(accept_btn, mx, my)) {
-                                ClientPacket pkt;
-                                memset(&pkt, 0, sizeof(pkt));
-                                pkt.type = MSG_FRIEND_ACCEPT;
-                                pkt.target_user_id = pending_requests[i].user_id;
-                                send(sock, &pkt, sizeof(pkt), 0);
-
-                                send_packet(MSG_FRIEND_LIST, 0);
-
-                                snprintf(notification_message,
-                                        sizeof(notification_message),
-                                        "Accepted %s's friend request!",
-                                        pending_requests[i].display_name);
-                                notification_time = SDL_GetTicks();
-                                break;
-                            }
-
-                            if (is_mouse_inside(decline_btn, mx, my)) {
-                                ClientPacket pkt;
-                                memset(&pkt, 0, sizeof(pkt));
-                                pkt.type = MSG_FRIEND_DECLINE;
-                                pkt.target_user_id = pending_requests[i].user_id;
-                                send(sock, &pkt, sizeof(pkt), 0);
-
-                                send_packet(MSG_FRIEND_LIST, 0);
-
-                                snprintf(notification_message,
-                                        sizeof(notification_message),
-                                        "Declined friend request");
-                                notification_time = SDL_GetTicks();
-                                break;
-                            }
-
-                            pending_y += 110;
-                        }
-
-                        /* ===== SENT REQUESTS (CANCEL) ===== */
-                        // int sent_x = 480 + 320;   // giống render
-                        // int sent_y = 134 + 46;
-
-                        // for (int i = 0; i < sent_count && i < 3; i++) {
-
-                        //     SDL_Rect cancel_btn = {
-                        //         sent_x + 240 - 110,
-                        //         sent_y + 5,
-                        //         90, 35
-                        //     };
-
-                        //     if (is_mouse_inside(cancel_btn, mx, my)) {
-                        //         ClientPacket pkt;
-                        //         memset(&pkt, 0, sizeof(pkt));
-                        //         pkt.type = MSG_FRIEND_CANCEL;
-                        //         pkt.target_user_id = sent_requests[i].user_id;
-                        //         send(sock, &pkt, sizeof(pkt), 0);
-
-                        //         snprintf(notification_message,
-                        //                 sizeof(notification_message),
-                        //                 "Cancelled friend request to %s",
-                        //                 sent_requests[i].display_name);
-                        //         notification_time = SDL_GetTicks();
-                        //         break;
-                        //     }
-
-                        //     sent_y += 55;  // spacing đúng render
-                        // }
-
-                        /* ===== SEND FRIEND REQUEST ===== */
-                        if (is_mouse_inside(btn_send_friend_request.rect, mx, my) &&
-                            strlen(inp_friend_request.text) > 0) {
-
-                            ClientPacket pkt;
-                            memset(&pkt, 0, sizeof(pkt));
-                            pkt.type = MSG_FRIEND_REQUEST;
-                            strncpy(pkt.target_display_name,
-                                    inp_friend_request.text,
-                                    MAX_DISPLAY_NAME - 1);
-                            send(sock, &pkt, sizeof(pkt), 0);
-
-                            snprintf(notification_message,
-                                    sizeof(notification_message),
-                                    "Friend request sent to %s!",
-                                    inp_friend_request.text);
-                            notification_time = SDL_GetTicks();
-                            inp_friend_request.text[0] = '\0';
-                        }
-
-                        if (is_mouse_inside((SDL_Rect){920, 40, 120, 40}, mx, my)) {
-                            current_screen = SCREEN_LOBBY_LIST;
-                            send_packet(MSG_LIST_LOBBIES, 0);
-                        }
-                    }
-
-                    /* ===== TEXT INPUT ===== */
-                    if (e.type == SDL_TEXTINPUT &&
-                        inp_friend_request.is_active) {
-                        handle_text_input(&inp_friend_request,
-                                        e.text.text[0]);
-                    }
-
-                    if (e.type == SDL_KEYDOWN &&
-                        inp_friend_request.is_active &&
-                        e.key.keysym.sym == SDLK_BACKSPACE) {
-                        handle_text_input(&inp_friend_request, '\b');
-                    }
-
-                    break;
-                }
-
-                case SCREEN_PROFILE: {
-                    if (e.type == SDL_MOUSEBUTTONDOWN) {
-                        SDL_Rect back_rect = {460, 650, 200, 60};
-                        if (is_mouse_inside(back_rect, mx, my)) {
-                            current_screen = SCREEN_LOBBY_LIST;
-                            send_packet(MSG_LIST_LOBBIES, 0);
-                        }
-                    }
-                    break;
-                }
-
-                case SCREEN_LEADERBOARD: {
-                    if (e.type == SDL_MOUSEBUTTONDOWN) {
-                        SDL_Rect back_rect = {460, 650, 200, 60};
-                        if (is_mouse_inside(back_rect, mx, my)) {
-                            current_screen = SCREEN_LOBBY_LIST;
-                            send_packet(MSG_LIST_LOBBIES, 0);
-                        }
-                    }
-                    break;
-                }
-                
-                // SCREEN_SETTINGS case removed
-
-                default:
-                    break;
-            }
-        }
-
-        // --- Network Receiving ---
-        ServerPacket spkt;
-        int recv_result;
-        
-        int packets_received = 0;
-        while ((recv_result = receive_server_packet(&spkt)) == 1 && packets_received < 10) {
-            process_server_packet(&spkt);
-            packets_received++;
+            handle_events(&e, mx, my, rend);
         }
         
-        if (recv_result < 0) {
-            printf("Server disconnected!\n");
-            running = 0;
-        }
-
-        // --- Rendering ---
-        if (lobby_error_message[0] != '\0' && SDL_GetTicks() - error_message_time > 3000) {
-            lobby_error_message[0] = '\0';
-        }
+        // 2. Process network
+        process_network_packets();
         
-
+        // 3. Update state
+        update_error_messages();
         
-        switch (current_screen) {
-            case SCREEN_LOGIN: {
-                btn_login.is_hovered = is_mouse_inside(btn_login.rect, mx, my);
-                btn_reg.is_hovered = is_mouse_inside(btn_reg.rect, mx, my);
-
-                // Login screen: only show username and password
-                render_login_screen(
-                    rend, font_large, font_small,
-                    &inp_user, NULL, &inp_pass,
-                    &btn_login, &btn_reg, status_message
-                );
-                break;
-            }
-            
-            case SCREEN_REGISTER: {
-                btn_login.is_hovered = is_mouse_inside(btn_login.rect, mx, my);
-                btn_reg.is_hovered = is_mouse_inside(btn_reg.rect, mx, my);
-
-                // Register screen: show all three fields
-                render_login_screen(
-                    rend, font_large, font_small,
-                    &inp_user, &inp_email, &inp_pass,
-                    &btn_login, &btn_reg, status_message
-                );
-                break;
-            }
-
-            case SCREEN_LOBBY_LIST: {
-                // Update hover states ONCE before rendering
-                btn_create.is_hovered = is_mouse_inside(btn_create.rect, mx, my);
-                btn_refresh.is_hovered = is_mouse_inside(btn_refresh.rect, mx, my);
-                btn_friends.is_hovered = is_mouse_inside(btn_friends.rect, mx, my);
-                // btn_quick_play removed
-                // btn_settings removed
-                btn_profile.is_hovered = is_mouse_inside(btn_profile.rect, mx, my);
-                btn_leaderboard.is_hovered = is_mouse_inside(btn_leaderboard.rect, mx, my);
-                btn_logout.is_hovered = is_mouse_inside(btn_logout.rect, mx, my);
-                btn_create_confirm.is_hovered = is_mouse_inside(btn_create_confirm.rect, mx, my);
-                btn_cancel.is_hovered = is_mouse_inside(btn_cancel.rect, mx, my);
-
-                render_lobby_list_screen(
-                    rend, font_small,
-                    lobby_list, lobby_count,
-                    &btn_create, &btn_refresh,
-                    selected_lobby_idx
-                );
-                
-                // Draw additional nav buttons - MODERNIZED with rounded corners
-                // Logout button (top left)
-                draw_button(rend, font_small, &btn_logout);
-
-                // Friends button
-                draw_button(rend, font_small, &btn_friends);
-                
-                // Quick Play removed
-                
-                // Settings button removed
-                
-                // Profile & Leaderboard buttons (top right)
-                draw_button(rend, font_small, &btn_profile);
-                draw_button(rend, font_small, &btn_leaderboard);
-                
-                //SDL_RenderPresent(rend);
-                
-                // Render dialog overlay if showing
-                if (show_create_room_dialog) {
-                    render_create_room_dialog(rend, font_small, &inp_room_name, &inp_access_code,
-                                             &btn_create_confirm, &btn_cancel);
-                    // Draw input fields
-                    draw_input_field(rend, font_small, &inp_room_name);
-                    draw_input_field(rend, font_small, &inp_access_code);
-                    // Draw buttons
-                    draw_button(rend, font_small, &btn_create_confirm);
-                    draw_button(rend, font_small, &btn_cancel);
-                    //SDL_RenderPresent(rend);
-                }
-                
-                // Render join code dialog if showing
-                if (show_join_code_dialog) {
-                    render_create_room_dialog(rend, font_small, &inp_join_code, NULL,
-                                             &btn_create_confirm, &btn_cancel);
-                    // Change button text
-                    strcpy(btn_create_confirm.text, "Join");
-                    draw_input_field(rend, font_small, &inp_join_code);
-                    draw_button(rend, font_small, &btn_create_confirm);
-                    draw_button(rend, font_small, &btn_cancel);
-                    //SDL_RenderPresent(rend);
-                }
-                break;
-            }
-
-            case SCREEN_LOBBY_ROOM: {
-                if (my_player_id == current_lobby.host_id) {
-                    btn_start.is_hovered = is_mouse_inside(btn_start.rect, mx, my);
-                    btn_leave.is_hovered = is_mouse_inside(btn_leave.rect, mx, my);
-                    btn_ready.is_hovered = 0;
-                } else {
-                    btn_ready.is_hovered = is_mouse_inside(btn_ready.rect, mx, my);
-                    btn_leave.is_hovered = is_mouse_inside(btn_leave.rect, mx, my);
-                    btn_start.is_hovered = 0;
-                }
-
-                Button *ready_ptr = (my_player_id != current_lobby.host_id) ? &btn_ready : NULL;
-                Button *start_ptr = (my_player_id == current_lobby.host_id) ? &btn_start : NULL;
-
-                render_lobby_room_screen(
-                    rend, font_small,
-                    &current_lobby, my_player_id,
-                    ready_ptr, start_ptr, &btn_leave
-                );
-                
-                // Render chat panel
-                render_chat_panel_room(rend, font_small, chat_history, &inp_chat_message, chat_count);
-                
-                // Invite button
-                if (current_lobby.num_players < 4) {
-                    btn_open_invite.is_hovered = is_mouse_inside(btn_open_invite.rect, mx, my);
-                    draw_button(rend, font_small, &btn_open_invite);
-                }
-                
-                if (show_invite_overlay) {
-                    render_invite_overlay(rend, font_small, friends_list, friends_count, 
-                                         invited_user_ids, invited_count, &btn_close_invite);
-                }
-                break;
-            }
-
-            case SCREEN_GAME: {
-                // Calculate elapsed game time
-                int elapsed_seconds = 0;
-                if (game_start_time > 0) {
-                    Uint32 elapsed_ms = SDL_GetTicks() - game_start_time;
-                    elapsed_seconds = elapsed_ms / 1000;
-                }
-                render_game(rend, font_small, tick++, my_player_id, elapsed_seconds);
-                break;
-            }
-            
-            case SCREEN_FRIENDS: {
-                Button back_btn;
-                back_btn.is_hovered = is_mouse_inside(back_btn.rect, mx, my);
-                btn_send_friend_request.is_hovered = is_mouse_inside(btn_send_friend_request.rect, mx, my);
-                
-                render_friends_screen(rend, font_small, friends_list, friends_count,
-                                     pending_requests, pending_count,
-                                     sent_requests, sent_count, &back_btn);
-                
-                // Draw friend request input and button
-                draw_input_field(rend, font_small, &inp_friend_request);
-                draw_button(rend, font_small, &btn_send_friend_request);
-                
-                // Draw delete confirmation dialog if active - MODERNIZED
-                if (show_delete_confirm && delete_friend_index >= 0 && delete_friend_index < friends_count) {
-                    int win_w, win_h;
-                    SDL_GetRendererOutputSize(rend, &win_w, &win_h);
-                    
-                    // Semi-transparent overlay
-                    SDL_SetRenderDrawBlendMode(rend, SDL_BLENDMODE_BLEND);
-                    SDL_SetRenderDrawColor(rend, 0, 0, 0, 200);
-                    SDL_Rect overlay = {0, 0, win_w, win_h};
-                    SDL_RenderFillRect(rend, &overlay);
-                    
-                    // Modern dialog box with rounded corners
-                    SDL_Rect dialog = {250, 250, 300, 150};
-                    
-                    // Layered shadow
-                    draw_layered_shadow(rend, dialog, 12, 6);
-                    
-                    // Dialog background
-                    SDL_Color dialog_bg = {30, 41, 59, 255};
-                    draw_rounded_rect(rend, dialog, dialog_bg, 12);
-                    
-                    // Dialog border
-                    SDL_Color border_col = {59, 130, 246, 255};
-                    draw_rounded_border(rend, dialog, border_col, 12, 2);
-                    
-                    // Title
-                    SDL_Surface *surf = TTF_RenderText_Blended(font_small, "Delete Friend?", (SDL_Color){255, 255, 255, 255});
-                    if (surf) {
-                        SDL_Texture *tex = SDL_CreateTextureFromSurface(rend, surf);
-                        SDL_Rect r = {dialog.x + (dialog.w - surf->w)/2, dialog.y + 20, surf->w, surf->h};
-                        SDL_RenderCopy(rend, tex, NULL, &r);
-                        SDL_DestroyTexture(tex);
-                        SDL_FreeSurface(surf);
-                    }
-                    
-                    // Friend name
-                    char msg[128];
-                    snprintf(msg, sizeof(msg), "Remove %s?", friends_list[delete_friend_index].display_name);
-                    surf = TTF_RenderText_Blended(font_small, msg, (SDL_Color){200, 200, 200, 255});
-                    if (surf) {
-                        SDL_Texture *tex = SDL_CreateTextureFromSurface(rend, surf);
-                        SDL_Rect r = {dialog.x + (dialog.w - surf->w)/2, dialog.y + 60, surf->w, surf->h};
-                        SDL_RenderCopy(rend, tex, NULL, &r);
-                        SDL_DestroyTexture(tex);
-                        SDL_FreeSurface(surf);
-                    }
-                    
-                    // Modern Yes button (rounded, red with shadow)
-                    SDL_Rect yes_btn = {300, 350, 100, 40};
-                    draw_layered_shadow(rend, yes_btn, 6, 3);
-                    SDL_Color yes_bg = {239, 68, 68, 255};
-                    draw_rounded_rect(rend, yes_btn, yes_bg, 6);
-                    
-                    surf = TTF_RenderText_Blended(font_small, "Yes", (SDL_Color){255, 255, 255, 255});
-                    if (surf) {
-                        SDL_Texture *tex = SDL_CreateTextureFromSurface(rend, surf);
-                        SDL_Rect r = {yes_btn.x + (yes_btn.w - surf->w)/2, yes_btn.y + (yes_btn.h - surf->h)/2, surf->w, surf->h};
-                        SDL_RenderCopy(rend, tex, NULL, &r);
-                        SDL_DestroyTexture(tex);
-                        SDL_FreeSurface(surf);
-                    }
-                    
-                    // Modern No button (rounded, gray with shadow)
-                    SDL_Rect no_btn = {420, 350, 100, 40};
-                    draw_layered_shadow(rend, no_btn, 6, 3);
-                    SDL_Color no_bg = {100, 116, 139, 255};
-                    draw_rounded_rect(rend, no_btn, no_bg, 6);
-                    
-                    surf = TTF_RenderText_Blended(font_small, "No", (SDL_Color){255, 255, 255, 255});
-                    if (surf) {
-                        SDL_Texture *tex = SDL_CreateTextureFromSurface(rend, surf);
-                        SDL_Rect r = {no_btn.x + (no_btn.w - surf->w)/2, no_btn.y + (no_btn.h - surf->h)/2, surf->w, surf->h};
-                        SDL_RenderCopy(rend, tex, NULL, &r);
-                        SDL_DestroyTexture(tex);
-                        SDL_FreeSurface(surf);
-                    }
-                    
-                    SDL_SetRenderDrawBlendMode(rend, SDL_BLENDMODE_NONE);
-                }
-                break;
-            }
-            
-            case SCREEN_PROFILE: {
-                Button back_btn;
-                back_btn.is_hovered = is_mouse_inside(back_btn.rect, mx, my);
-                // Determine title based on whether it's our profile or someone else's
-                char p_title[128] = "";
-                if (strcmp(my_profile.username, my_username) != 0 && strlen(my_profile.username) > 0) {
-                     snprintf(p_title, sizeof(p_title), "PROFILE: %s", my_profile.display_name);
-                }
-                render_profile_screen(rend, font_medium, font_small, &my_profile, &back_btn, p_title);
-                break;
-            }
-            
-            case SCREEN_LEADERBOARD: {
-                Button back_btn;
-                back_btn.is_hovered = is_mouse_inside(back_btn.rect, mx, my);
-                render_leaderboard_screen(rend, font_large, font_small, leaderboard, leaderboard_count, &back_btn);
-                break;
-            }
-            
-            // SCREEN_SETTINGS case removed
-            
-            case SCREEN_POST_MATCH: {
-                // Update hover states
-                btn_rematch.is_hovered = is_mouse_inside((SDL_Rect){660, 850, 250, 60}, mx, my);
-                btn_return_lobby.is_hovered = is_mouse_inside((SDL_Rect){930, 850, 250, 60}, mx, my);
-                
-                render_post_match_screen(rend, font_large, font_small,
-                                        post_match_winner_id, post_match_elo_changes,
-                                        post_match_kills, post_match_duration,
-                                        &btn_rematch, &btn_return_lobby,
-                                        &current_state, my_player_id);
-                break;
-            }
-
-            default:
-                break;
-        }
+        // 4. Render
+        render_current_screen(rend, font_large, font_medium, font_small, mx, my, tick);
+        render_ui_overlays(rend, font_small, mx, my);
+        SDL_RenderPresent(rend);
         
-        // Render notifications at top center - MODERNIZED
-        if (current_screen != SCREEN_LOGIN &&
-            current_screen != SCREEN_REGISTER &&
-            notification_message[0] != '\0' &&
-            SDL_GetTicks() - notification_time < NOTIFICATION_DURATION) {
-            int win_w, win_h;
-            SDL_GetRendererOutputSize(rend, &win_w, &win_h);
-            
-            SDL_Surface *notif = TTF_RenderText_Blended(font_small, notification_message, (SDL_Color){255, 255, 255, 255});
-            if (notif) {
-                int box_w = notif->w + 40;
-                int box_h = notif->h + 20;
-                int box_x = (win_w - box_w) / 2;
-                int box_y = 20;
-                
-                SDL_Rect bg = {box_x, box_y, box_w, box_h};
-                
-                // Layered shadow for depth
-                draw_layered_shadow(rend, bg, 8, 4);
-                
-                // Background with rounded corners
-                SDL_Color notif_bg = {59, 130, 246, 230};
-                SDL_SetRenderDrawBlendMode(rend, SDL_BLENDMODE_BLEND);
-                draw_rounded_rect(rend, bg, notif_bg, 8);
-                
-                // Border with accent color
-                SDL_Color notif_border = {96, 165, 250, 255};
-                draw_rounded_border(rend, bg, notif_border, 8, 2);
-                SDL_SetRenderDrawBlendMode(rend, SDL_BLENDMODE_NONE);
-                
-                // Text
-                SDL_Texture *tex = SDL_CreateTextureFromSurface(rend, notif);
-                SDL_Rect text_rect = {box_x + 20, box_y + 10, notif->w, notif->h};
-                SDL_RenderCopy(rend, tex, NULL, &text_rect);
-                SDL_DestroyTexture(tex);
-                SDL_FreeSurface(notif);
-            }
-        } else if (SDL_GetTicks() - notification_time >= NOTIFICATION_DURATION) {
-            notification_message[0] = '\0'; // Clear after duration
-        }
-
-        // Global Invite Popup
-        if (current_invite.is_active) {
-            // Check button hovers
-            btn_invite_accept.is_hovered = is_mouse_inside(btn_invite_accept.rect, mx, my);
-            btn_invite_decline.is_hovered = is_mouse_inside(btn_invite_decline.rect, mx, my);
-            render_invitation_popup(rend, font_small, &current_invite, &btn_invite_accept, &btn_invite_decline);
-        }
-
-        SDL_RenderPresent(rend); // ~60 FPS
+        tick++;
     }
 
-    close(sock);
-    SDL_DestroyRenderer(rend);
-    SDL_DestroyWindow(win);
-    if (font_large) TTF_CloseFont(font_large);
-    if (font_small) TTF_CloseFont(font_small);
-    TTF_Quit();
-    SDL_Quit();
+    // Cleanup
+    cleanup_resources(win, rend, font_large, font_medium, font_small);
     return 0;
 }
