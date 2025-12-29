@@ -30,7 +30,6 @@
 #define EXPLOSION 4
 #define POWERUP_BOMB 5      // Tăng số bom
 #define POWERUP_FIRE 6      // Tăng tầm nổ
-#define POWERUP_FIRE 6      // Tăng tầm nổ
 
 #define MOVE_UP 0
 #define MOVE_DOWN 1
@@ -88,7 +87,7 @@
 // ===== AUTH RESULT CODES =====
 #define AUTH_SUCCESS              0
 #define AUTH_FAIL                 1
-#define AUTH_FAILED               1   // backward compatibility
+#define AUTH_FAILED               AUTH_FAIL   // backward compatibility
 // Registration errors
 #define AUTH_USER_EXISTS          2
 #define AUTH_INVALID_USERNAME     3
