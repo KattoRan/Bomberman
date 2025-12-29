@@ -15,8 +15,6 @@ void render_login_screen(SDL_Renderer *renderer, TTF_Font *font_large, TTF_Font 
 
     // Tính toán vị trí trung tâm cho tất cả elements
     int center_x = win_w / 2;
-    int content_width = 400;
-    int start_x = center_x - content_width / 2;
 
     // Tiêu đề "BOMBERMAN" với hiệu ứng đẹp
     if (font_large) {

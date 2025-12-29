@@ -65,7 +65,7 @@ Button btn_cancel         = {{620, 440, 220, 60}, "Cancel", 0, BTN_DANGER};
 // Notification system
 char notification_message[256] = "";
 Uint32 notification_time = 0;
-const int NOTIFICATION_DURATION = 3000; // 3 seconds
+const Uint32 NOTIFICATION_DURATION = 3000; // 3 seconds
 
 // Access code prompt for joining private rooms - adjusted for 1120x720
 InputField inp_join_code = {{335, 320, 450, 60}, "", "Enter 6-digit access code:", 0, 6};
@@ -74,7 +74,7 @@ int selected_private_lobby_id = -1;
 
 // Friend request UI - adjusted for 1120x720
 InputField inp_friend_request = {{400, 620, 360, 60}, "", "Enter display name...", 0, 31};
-Button btn_send_friend_request = {{800, 620, 220, 60}, "Send Request", 0};
+Button btn_send_friend_request = {{800, 620, 220, 60}, "Send Request", 0, BTN_PRIMARY};
 
 // Delete friend confirmation
 int show_delete_confirm = 0;
@@ -86,8 +86,8 @@ int post_match_elo_changes[4] = {0, 0, 0, 0};
 int post_match_kills[4] = {0, 0, 0, 0};
 int post_match_duration = 0;  // Match duration in seconds
 int post_match_shown = 0;  // Prevent showing multiple times
-Button btn_rematch       = {{360, 800, 250, 60}, "Rematch", 0};
-Button btn_return_lobby  = {{610, 800, 250, 60}, "Back to Room", 0};
+Button btn_rematch       = {{360, 800, 250, 60}, "Rematch", 0, BTN_PRIMARY};
+Button btn_return_lobby  = {{610, 800, 250, 60}, "Back to Room", 0, BTN_PRIMARY};
 
 // Game timer tracking
 Uint32 game_start_time = 0;  // SDL ticks when game started

@@ -20,7 +20,6 @@ void draw_bomb(SDL_Renderer *renderer, int x, int y, int tick) {
     // Gradient fill for bomb (dark to bright red)
     SDL_Color dark_red = {150, 0, 0, 255};
     SDL_Color bright_red = {255, 30, 30, 255};
-    SDL_Color bomb_color = ((tick / 10) % 2 == 0) ? bright_red : dark_red;
     
     // Vertical gradient
     draw_vertical_gradient(renderer, bomb_rect, bright_red, dark_red);

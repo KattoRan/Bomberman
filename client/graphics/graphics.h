@@ -37,6 +37,7 @@ void draw_player(SDL_Renderer*, Player*, SDL_Color);
 void add_notification(const char*, SDL_Color);
 void draw_notifications(SDL_Renderer*, TTF_Font*);
 void draw_status_bar(SDL_Renderer*, TTF_Font*, int);
+void draw_sidebar(SDL_Renderer *renderer, TTF_Font *font, int my_player_id, int elapsed_seconds);
 SDL_Rect get_game_leave_button_rect();
 
 // overlay

@@ -10,7 +10,7 @@ void render_profile_screen(SDL_Renderer *renderer, TTF_Font *font_medium, TTF_Fo
     int win_w, win_h;
     SDL_GetRendererOutputSize(renderer, &win_w, &win_h);
     
-    draw_background_grid(renderer, win_w, win_h);
+    draw_rounded_rect(renderer, (SDL_Rect){0, 0, win_w, win_h}, CLR_BG_DARK, UI_CORNER_RADIUS);
     
     // Title with shadow
     const char *title_text = (title_override && strlen(title_override) > 0) ? title_override : "YOUR PROFILE";
@@ -139,8 +139,9 @@ void render_leaderboard_screen(SDL_Renderer *renderer, TTF_Font *font_medium, TT
                                Button *back_btn) {
     int win_w, win_h;
     SDL_GetRendererOutputSize(renderer, &win_w, &win_h);
-    
-    draw_background_grid(renderer, win_w, win_h);
+
+    // Background
+    draw_rounded_rect(renderer, (SDL_Rect){0, 0, win_w, win_h}, CLR_BG_DARK, UI_CORNER_RADIUS);
     
     // Title with shadow
     const char *title_text = "LEADERBOARD - TOP PLAYERS";

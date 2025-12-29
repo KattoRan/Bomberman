@@ -486,7 +486,7 @@ void draw_background_grid(SDL_Renderer *renderer, int w, int h) {
     float pulse = (sinf(SDL_GetTicks() / 700.0f) + 1.0f) / 2.0f;  // 0.0 to 1.0, faster
     int grid_alpha = 20 + (int)(pulse * 140);  // 20 to 160 (much more dramatic!)
     
-    SDL_SetRenderDrawColor(renderer, CLR_GRID.r, CLR_GRID.g, CLR_GRID.b, grid_alpha);
+    SDL_SetRenderDrawColor(renderer, CLR_ACCENT_LIGHT.r, CLR_ACCENT_LIGHT.g, CLR_ACCENT_LIGHT.b, grid_alpha);
     for (int i = 0; i < w; i += UI_GRID_SIZE) {
         SDL_RenderDrawLine(renderer, i, 0, i, h);
     }

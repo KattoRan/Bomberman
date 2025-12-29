@@ -64,6 +64,7 @@ void truncate_text_to_fit(char *text, size_t text_size, TTF_Font *font, int max_
 void draw_rounded_rect(SDL_Renderer *renderer, SDL_Rect rect, SDL_Color color, int radius);
 void draw_rounded_border(SDL_Renderer *renderer, SDL_Rect rect, SDL_Color color, int radius, int thickness);
 void draw_layered_shadow(SDL_Renderer *renderer, SDL_Rect rect, int radius, int offset);
+void draw_button_text(SDL_Renderer *renderer, TTF_Font *font, Button *btn, SDL_Color color);
 void draw_button(SDL_Renderer *renderer, TTF_Font *font, Button *btn);
 void draw_input_field(SDL_Renderer *renderer, TTF_Font *font, InputField *field);
 void draw_background_grid(SDL_Renderer *renderer, int w, int h);

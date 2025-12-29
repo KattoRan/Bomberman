@@ -1,5 +1,6 @@
 #include "../state/client_state.h"
 #include "ui.h"
+#include "../graphics/graphics.h"
 #include <SDL2/SDL.h> 
 #include <SDL2/SDL_ttf.h>
 #define UI_CORNER_RADIUS 8

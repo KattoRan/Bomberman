@@ -83,7 +83,7 @@ extern Button btn_cancel;
 // Notification system
 extern char notification_message[256];
 extern Uint32 notification_time;
-extern const int NOTIFICATION_DURATION;
+extern const Uint32 NOTIFICATION_DURATION;
 
 // Access code prompt
 extern InputField inp_join_code;

@@ -7,6 +7,7 @@
 #include "../state/client_state.h"
 #include "../network/network.h"
 #include "../graphics/graphics.h"
+#include "../handlers/session.h"
 
 int all_players_ready(Lobby *lobby) {
     for (int i = 0; i < lobby->num_players; i++) {
@@ -385,10 +386,10 @@ void handle_events(SDL_Event *e, int mx, int my, SDL_Renderer *rend) {
                     int btn_h = 40;
                     
                     // Join Button Rect
-                    SDL_Rect join_rect = {start_x + list_width - 200, btn_y, 90, btn_h};
+                    SDL_Rect join_rect = {start_x + list_width - 220, btn_y, 90, btn_h};
                     
                     // Spectate Button Rect
-                    SDL_Rect spectate_rect = {start_x + list_width - 100, btn_y, 90, btn_h};
+                    SDL_Rect spectate_rect = {start_x + list_width - 120, btn_y, 110, btn_h};
 
                     // JOIN CLICK
                     if (is_mouse_inside(join_rect, mx, my)) {
@@ -450,7 +451,7 @@ void handle_events(SDL_Event *e, int mx, int my, SDL_Renderer *rend) {
                     // Calculated same way as render_invite_overlay
                     int win_w, win_h;
                     SDL_GetRendererOutputSize(rend, &win_w, &win_h);
-                    int overlay_w = 500, overlay_h = 500;
+                    int overlay_w = 500;
                     int overlay_x = (win_w - overlay_w) / 2;
                     int overlay_y = 110;
                     int list_y = overlay_y + 80;
@@ -559,7 +560,6 @@ void handle_events(SDL_Event *e, int mx, int my, SDL_Renderer *rend) {
                 // Kick buttons (host only, check for each player)
                 else if (my_player_id == current_lobby.host_id) {
                     int card_y = 120;
-                    int card_width = 440;
                     int start_x = 80;
                     
                     for (int i = 0; i < current_lobby.num_players; i++) {

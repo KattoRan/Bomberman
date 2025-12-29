@@ -10,7 +10,7 @@ void render_friends_screen(SDL_Renderer *renderer, TTF_Font *font,
                            Button *back_btn) {
     int win_w, win_h;
     SDL_GetRendererOutputSize(renderer, &win_w, &win_h);
-    draw_background_grid(renderer, win_w, win_h);
+    draw_rounded_rect(renderer, (SDL_Rect){0, 0, win_w, win_h}, CLR_BG_DARK, UI_CORNER_RADIUS);
     
     SDL_Color white = {255, 255, 255, 255};
     

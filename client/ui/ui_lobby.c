@@ -52,12 +52,11 @@ void render_lobby_list_screen(SDL_Renderer *renderer, TTF_Font *font,
         int shadow_offset = (i == selected_lobby) ? 6 : 4;
         draw_layered_shadow(renderer, lobby_rect, UI_CORNER_RADIUS, shadow_offset);
         
-        // Background with rounded corners
-        SDL_Color bg = (i == selected_lobby) ? CLR_PRIMARY : CLR_INPUT_BG;
-        draw_rounded_rect(renderer, lobby_rect, bg, UI_CORNER_RADIUS);
-        
+        // Background
+        draw_rounded_rect(renderer, lobby_rect, CLR_BG_DARK, UI_CORNER_RADIUS);
+
         // Border (accent for selected, gray for others)
-        SDL_Color border = (i == selected_lobby) ? CLR_ACCENT : CLR_GRAY;
+        SDL_Color border = (i == selected_lobby) ? CLR_ACCENT_DK : CLR_GRAY;
         draw_rounded_border(renderer, lobby_rect, border, UI_CORNER_RADIUS, 2);
         
         // Glow effect for selected card
@@ -72,7 +71,7 @@ void render_lobby_list_screen(SDL_Renderer *renderer, TTF_Font *font,
             // Tên lobby với private badge
             char display_name[80];
             if (lobbies[i].is_private) {
-                snprintf(display_name, sizeof(display_name), "[PRIVATE] %s (ID:%d)", lobbies[i].name, lobbies[i].id);
+                snprintf(display_name, sizeof(display_name), "[PRIVATE] %.40s (ID:%d)", lobbies[i].name, lobbies[i].id);
             } else {
                 snprintf(display_name, sizeof(display_name), "%s (ID:%d)", lobbies[i].name, lobbies[i].id);
             }
@@ -94,7 +93,7 @@ void render_lobby_list_screen(SDL_Renderer *renderer, TTF_Font *font,
             snprintf(player_text, sizeof(player_text), "Ply:%d | Spc:%d", 
                      lobbies[i].num_players, lobbies[i].spectator_count);
             // Move badge left to make room for buttons
-            SDL_Rect player_badge = {start_x + 330, y + 22, 200, 35};
+            SDL_Rect player_badge = {start_x + 310, y + 22, 200, 35};
             
             SDL_Color badge_bg = lobbies[i].num_players >= 4 ? CLR_DANGER : 
                                lobbies[i].num_players >= 2 ? CLR_WARNING : CLR_SUCCESS;
@@ -135,45 +134,32 @@ void render_lobby_list_screen(SDL_Renderer *renderer, TTF_Font *font,
             // --- ACTION BUTTONS ---
             int btn_y = y + 20;
             int btn_h = 40;
-            
+
             // JOIN Button
             Button btn_join = {
-                .rect = {start_x + list_width - 200, btn_y, 90, btn_h},
-                .type = BTN_PRIMARY
+                .rect = {start_x + list_width - 220, btn_y, 90, btn_h},
+                .type = BTN_PRIMARY,
+                .is_hovered = 0
             };
             strcpy(btn_join.text, "Join");
             
-            // If playing, render as "disabled" (Gray)
             if (lobbies[i].status == LOBBY_PLAYING) {
-                // Manually draw disabled state
                 draw_rounded_rect(renderer, btn_join.rect, CLR_GRAY, UI_CORNER_RADIUS);
                 draw_rounded_border(renderer, btn_join.rect, CLR_GRAY_LIGHT, UI_CORNER_RADIUS, 1);
                 draw_button_text(renderer, font, &btn_join, CLR_GRAY_LIGHT);
             } else {
-                // Normal green join
-                // Temporarily override primary colors for a "Green/Success" look? 
-                // Or just use Primary style. Let's use Primary (Blue/Purple) but maybe customize 
-                // if we want distinct colors. For now, Primary is fine, or customize manually.
-                // Let's use custom "Success" color for Join
-                SDL_Color green_top = {34, 197, 94, 255};
-                SDL_Color green_bot = {21, 128, 61, 255};
-                
-                // Shadow
-                draw_layered_shadow(renderer, btn_join.rect, UI_CORNER_RADIUS, 2);
-                draw_vertical_gradient(renderer, btn_join.rect, green_top, green_bot);
-                draw_rounded_border(renderer, btn_join.rect, green_bot, UI_CORNER_RADIUS, 1);
-                draw_button_text(renderer, font, &btn_join, CLR_WHITE);
+                draw_button(renderer, font, &btn_join);
             }
 
             // SPECTATE Button
             Button btn_spectate = {
-                .rect = {start_x + list_width - 100, btn_y, 90, btn_h},
-                .type = BTN_OUTLINE // Use outline or primary?
+                .rect = {start_x + list_width - 120, btn_y, 110, btn_h},
+                .type = BTN_OUTLINE,
+                .is_hovered = 0
             };
             strcpy(btn_spectate.text, "Watch");
             
-            // Blue/Primary style
-            draw_button_primary(renderer, font, &btn_spectate);
+            draw_button(renderer, font, &btn_spectate);
         }
         y += card_height + 10;
     }
@@ -190,7 +176,7 @@ void render_lobby_room_screen(SDL_Renderer *renderer, TTF_Font *font,
     int win_w, win_h;
     SDL_GetRendererOutputSize(renderer, &win_w, &win_h);
 
-    draw_background_grid(renderer, win_w, win_h);
+    draw_rounded_rect(renderer, (SDL_Rect){0, 0, win_w, win_h}, CLR_BG_DARK, UI_CORNER_RADIUS);
     
     // Title with room name and ID for private rooms
     if (font) {
@@ -365,8 +351,6 @@ void render_lobby_room_screen(SDL_Renderer *renderer, TTF_Font *font,
     }
     
     int button_y = win_h - 90;
-    int center_x = win_w / 2;
-    
     // Cập nhật vị trí nút Leave (luôn hiện)
     leave_btn->rect.x = 320;
     leave_btn->rect.y = button_y;

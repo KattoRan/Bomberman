@@ -8,6 +8,7 @@
 #include "../state/client_state.h"
 #include "../handlers/session.h"
 #include "../handlers/game.h"
+#include "../graphics/graphics.h"
 
 // Implementation of network functions from main.c
 int connect_to_server(const char *server_ip, int port) {
