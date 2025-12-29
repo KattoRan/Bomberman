@@ -85,14 +85,20 @@
 #define GAME_RUNNING 1
 #define GAME_ENDED 2
 
-// Response codes
-#define AUTH_SUCCESS 0
-#define AUTH_FAIL 1
-#define AUTH_FAILED 1           // Alias for backward compatibility
-#define AUTH_USER_EXISTS 2
-#define AUTH_INVALID 3
-#define AUTH_USERNAME_EXISTS 4
-#define AUTH_EMAIL_EXISTS 5
+// ===== AUTH RESULT CODES =====
+#define AUTH_SUCCESS              0
+#define AUTH_FAIL                 1
+#define AUTH_FAILED               1   // backward compatibility
+// Registration errors
+#define AUTH_USER_EXISTS          2
+#define AUTH_INVALID_USERNAME     3
+#define AUTH_INVALID_EMAIL        4
+#define AUTH_INVALID_PASSWORD     5
+#define AUTH_USERNAME_EXISTS      6
+#define AUTH_EMAIL_EXISTS         7
+// Login errors
+#define AUTH_USER_NOT_FOUND       8
+#define AUTH_WRONG_PASSWORD       9
 
 // Server response codes (errors)
 #define ERR_LOBBY_NOT_FOUND -2

@@ -2,6 +2,37 @@
 #include <string.h>
 #include "../server.h"
 
+const char* auth_code_to_message(int code) {
+    switch (code) {
+        // Success
+        case AUTH_SUCCESS:
+            return "Success";
+
+        // Register
+        case AUTH_INVALID_USERNAME:
+            return "Username format is invalid";
+        case AUTH_INVALID_EMAIL:
+            return "Email format is invalid";
+        case AUTH_INVALID_PASSWORD:
+            return "Password is too short";
+        case AUTH_USERNAME_EXISTS:
+            return "Username is already taken";
+        case AUTH_EMAIL_EXISTS:
+            return "Email is already registered";
+        case AUTH_USER_EXISTS:
+            return "Username and email are already taken";
+
+        // Login
+        case AUTH_USER_NOT_FOUND:
+            return "Account does not exist";
+        case AUTH_WRONG_PASSWORD:
+            return "Incorrect password";
+
+        default:
+            return "Authentication failed";
+    }
+}
+
 void handle_register(int socket_fd, ClientPacket *pkt) {
     ClientInfo *client = find_client_by_socket(socket_fd);
     if (!client) return;
@@ -40,11 +71,7 @@ void handle_register(int socket_fd, ClientPacket *pkt) {
              strcpy(response.message, "Registration successful");
         }
     } else {
-        if (response.code == AUTH_USERNAME_EXISTS) strcpy(response.message, "Username is taken. Try another.");
-        else if (response.code == AUTH_EMAIL_EXISTS) strcpy(response.message, "Email is taken. Try another.");
-        else if (response.code == AUTH_USER_EXISTS) strcpy(response.message, "Email and username are taken. Try another.");
-        else if (response.code == AUTH_INVALID) strcpy(response.message, "Invalid registration data");
-        else strcpy(response.message, "Registration failed");
+        strncpy(response.message,auth_code_to_message(response.code),sizeof(response.message) - 1);
     }
     send_response(socket_fd, &response);
 }
@@ -105,7 +132,7 @@ void handle_login(int socket_fd, ClientPacket *pkt) {
              }
         }
     } else {
-        strcpy(response.message, "Invalid credentials");
+        strncpy(response.message,auth_code_to_message(response.code),sizeof(response.message) - 1);
     }
     send_response(socket_fd, &response);
 }

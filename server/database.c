@@ -119,17 +119,17 @@ int validate_email(const char *email) {
 int db_register_user(const char *username, const char *email, const char *password) {
     if (!validate_username(username)) {
         printf("[DB] Invalid username format: %s\n", username);
-        return AUTH_INVALID;
+        return AUTH_INVALID_USERNAME;
     }
-    
+
     if (!validate_email(email)) {
         printf("[DB] Invalid email format: %s\n", email);
-        return AUTH_INVALID;
+        return AUTH_INVALID_EMAIL;
     }
-    
+
     if (strlen(password) < 4) {
         printf("[DB] Password too short\n");
-        return AUTH_INVALID;
+        return AUTH_INVALID_PASSWORD;
     }
     
     // Check if username/email already exists
@@ -249,7 +249,7 @@ int db_login_user(const char *identifier, const char *password, User *out_user) 
     if (rc != SQLITE_ROW) {
         sqlite3_finalize(stmt);
         printf("[DB] User not found: %s\n", identifier);
-        return AUTH_INVALID;
+        return AUTH_USER_NOT_FOUND;
     }
     
     // Get stored hash and salt
@@ -264,7 +264,7 @@ int db_login_user(const char *identifier, const char *password, User *out_user) 
     if (strcmp(stored_hash, computed_hash) != 0) {
         sqlite3_finalize(stmt);
         printf("[DB] Invalid password for: %s\n", identifier);
-        return AUTH_INVALID;
+        return AUTH_WRONG_PASSWORD;
     }
     
     // Populate user struct
