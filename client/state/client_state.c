@@ -44,7 +44,7 @@ Button btn_refresh    = {{460, 620, 200, 60}, "Refresh", 0 , BTN_PRIMARY};
 Button btn_friends    = {{670, 620, 200, 60}, "Friends", 0, BTN_PRIMARY};
 Button btn_profile     = {{850, 20, 130, 50}, "Profile", 0, BTN_PRIMARY};
 Button btn_leaderboard = {{1000, 20, 80, 50}, "Top", 0, BTN_OUTLINE};
-Button btn_logout        = {{40, 20, 120, 50}, "Logout", BTN_DANGER};
+Button btn_logout        = {{40, 20, 120, 50}, "Logout", 0, BTN_DANGER};
 
 // Lobby room buttons
 Button btn_ready = {{80, 630, 200, 50}, "Ready", 0, BTN_PRIMARY};
