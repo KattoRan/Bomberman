@@ -91,7 +91,7 @@ void render_game(SDL_Renderer *renderer, TTF_Font *font, int tick, int my_player
         int remaining_seconds = remaining_ticks / 20;  // 20 ticks per second
         int minutes = remaining_seconds / 60;
         int seconds = remaining_seconds % 60;
-        snprintf(timer_text, sizeof(timer_text), "⏱ %d:%02d", minutes, seconds);
+        snprintf(timer_text, sizeof(timer_text), "Countdown %d:%02d", minutes, seconds);
         
         // Color code based on time remaining
         if (remaining_seconds <= 15) {
